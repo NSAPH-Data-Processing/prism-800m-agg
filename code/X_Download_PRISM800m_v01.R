@@ -3,18 +3,8 @@
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% OVERVIEW  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 #
-# Step 1. Bulk-download PRISM data from FTP
-# Step 2. Create PRISM extraction points
-# Step 3. Calculate land-area weighted PRISM values at the census block level
-# Step 4. Calculate *population*-weighted PRISM values at the census block group through county levels 
-#
-# This code is designed to illustrate the calculation of population-weighted mean
-# values in PRISM for a single month in Washington, D.C.
-#
-# The code can be adapted to multiple times and locations, but requires substantial
-# computing time. It is recommended that for nationwide analyses one use distributed 
-# processing on a computing cluster, divided between time and space (for example,
-# processing one month at a time for individual states).
+# Downloading PRISM 800m and accompanying data for prism-800m-agg pipeline (ie:
+# census geographies. Adapted from https://github.com/Climate-CAFE/population_weighting_raster_data
 #
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # %%%%%%%%%%%%%%%%%% STEP 1: DOWNLOAD PRISM DATA FROM FTP %%%%%%%%%%%%%%%%%%%% #
