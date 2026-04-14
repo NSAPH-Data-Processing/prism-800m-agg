@@ -26,6 +26,7 @@
 ## 5) Use population-weighting to derive exposure data for block group, tract,
 ##    and county levels (next file).
 
+library("yaml")
 library("terra")  # For raster data
 library("sf")     # For vector data
 library("plyr")
@@ -34,7 +35,7 @@ library("doBy")
 library("tidyverse")
 library("tidycensus")
 library("lwgeom")
-sf_use_s2(FALSE)  
+sf_use_s2(FALSE)
 # S2 is for computing distances, areas, etc. on a SPHERE (using
 # geographic coordinates, i.e., lat/lon in decimal-degrees); no need for this
 # extra computational processing time if using PROJECTED coordinates,
@@ -50,29 +51,42 @@ options(tigris_use_cache = TRUE)
 
 # Check package version numbers
 #
-if (packageVersion("terra") < "1.5.34"   | packageVersion("sf") < "1.0.7" | 
+if (packageVersion("terra") < "1.5.34"   | packageVersion("sf") < "1.0.7" |
     packageVersion("plyr")  < "1.8.7"    | packageVersion("tigris") < "2.0.4" |
     packageVersion("doBy")  < "4.6.19"   | packageVersion("tidyverse") < "1.3.1" |
     packageVersion("tidycensus") < "1.5" | packageVersion("lwgeom") < "0.2.8") {
   cat("WARNING: packages are outdated and may result in errors.") }
 
-# Set input year - this can be any year for which PRISM data is available.
-# The raster grid will be consistent across all years.
-#
-year <- 2010
-
 # %%%%%%%%%%%%%%%%%%%%%%% USER-DEFINED PARAMETERS %%%%%%%%%%%%%%%%%%%%%%%%%%%% #
-# Set working directory
+# Load configuration from config.yaml.
+# The config path can be passed as a command-line argument; if omitted, the
+# script looks for config.yaml in the current directory then one level up.
 #
-setwd("")
+args <- commandArgs(trailingOnly = TRUE)
+.config_path <- if (length(args) > 0 && grepl("\\.ya?ml$", args[length(args)])) {
+  args[length(args)]
+} else if (file.exists("config.yaml")) {
+  "config.yaml"
+} else if (file.exists("../config.yaml")) {
+  "../config.yaml"
+} else {
+  stop("config.yaml not found. Pass its path as the last command-line argument.")
+}
+config <- yaml::read_yaml(.config_path)
+
+setwd(config$working_dir)
+
+# Year used to build the fishnet. Any year with PRISM data works; the raster
+# grid is consistent across all years and variables.
+year <- config$fishnet$year
 
 # This directory should include the raw PRISM 800m raster files.
 # The structure below assumes the raw data have been stored as
 #       RawData --> variable directories --> year directories
-prismdir <- paste0("rawdata/tmax/", year, "/")
+prismdir <- paste0(config$paths$rawdata_dir, config$fishnet$variable, "/", year, "/")
 
-# The directory below is where the final fishnet will be outputs
-outdir <- "intermediate/fishnet/"
+# The directory below is where the final fishnet will be output
+outdir <- config$paths$fishnet_dir
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # %%%%%%%%%%%%%%%%%% CREATE Temperature EXTRACTION POINTS  %%%%%%%%%%%%%%%%%%% #
@@ -84,12 +98,12 @@ outdir <- "intermediate/fishnet/"
 # rasters and then extract the first in the stack for creation of the fishnet
 # below. Any raster works since they have the same grid
 #
-tmax_files <- list.files(prismdir, pattern=paste0('\\.tif$'), full.names = F)
+prism_files <- list.files(prismdir, pattern=paste0('\\.tif$'), full.names = F)
 
 # Stack all of the daily files by year
 #
-tmax_files <- paste0(prismdir, tmax_files)
-tmax_raster <- rast(tmax_files[1])
+prism_files <- paste0(prismdir, prism_files)
+tmax_raster <- rast(prism_files[1])
 
 # %%%%%%%%%%%%%%%%%%%% CREATE A FISHNET GRID OF THE RASTER EXTENT %%%%%%%%%%%% #
 #
@@ -129,7 +143,8 @@ tmax_fishnet <- st_make_grid(tmax_matrix, n = c(tmax_cols, tmax_rows),
 
 # Write fishnet to output as gpkg
 #
-st_write(tmax_fishnet, paste0(outdir, "prism_fishnet_tmax_800m.gpkg"), append=FALSE)
+fishnet_name <- paste0("prism_fishnet_", config$fishnet$variable, "_800m")
+st_write(tmax_fishnet, paste0(outdir, fishnet_name, ".gpkg"), append=FALSE)
 
 # Automated QC check -- confirm same coordinate reference system (CRS) between
 #                       the fishnet and temperature raster

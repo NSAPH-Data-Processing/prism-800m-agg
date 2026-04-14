@@ -12,8 +12,11 @@
 year=$(echo $SGE_TASK_ID | cut -c 1-4)
 state=$(echo $SGE_TASK_ID | cut -c 5-6)
 
+## Absolute path to config.yaml (edit before submitting)
+CONFIG="/pathtoscript/config.yaml"
+
 module load R/4.3.1
-Rscript /pathtoscript/02a_PRISM_Raster_Extract_v03.R $year $state
+Rscript /pathtoscript/02a_PRISM_Raster_Extract_v03.R $year $state $CONFIG
 
 ## In Terminal, cd to the directory in which this bash script is located. 
 ## The task ID will be a concatenation of the year and state index (01-49). For example,

@@ -9,8 +9,11 @@
 ## Learn more about high performance computing:
 ##		https://github.com/Climate-CAFE/hpc_batch_jobs_micro_tutorial
 
+## Absolute path to config.yaml (edit before submitting)
+CONFIG="/pathtoscript/config.yaml"
+
 module load R/4.2.1
-Rscript /pathtoscript/00a_Create_Fishnet_PRISMv2_800m_v03.R 
+Rscript /pathtoscript/00a_Create_Fishnet_PRISMv2_800m_v03.R $CONFIG
 
 ## In Terminal, cd to the directory in which this bash script is located. Then,
 ## submit the job using the below:

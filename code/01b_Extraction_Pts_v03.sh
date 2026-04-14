@@ -9,8 +9,11 @@
 ## Learn more about high performance computing:
 ##		https://github.com/Climate-CAFE/hpc_batch_jobs_micro_tutorial
 
+## Absolute path to config.yaml (edit before submitting)
+CONFIG="/pathtoscript/config.yaml"
+
 module load R/4.4.0
-Rscript /pathtoscript/01a_Extraction_Pts_v03.R $SGE_TASK_ID
+Rscript /pathtoscript/01a_Extraction_Pts_v03.R $SGE_TASK_ID $CONFIG
 
 ## In Terminal, cd to the directory in which this bash script is located. Then,
 ## submit the job as an array *for each fips* with this command in Terminal:

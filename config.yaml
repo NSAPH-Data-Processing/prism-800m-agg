@@ -1,0 +1,67 @@
+# =========================================================================== #
+# PRISM 800m Aggregation Pipeline — Configuration
+# =========================================================================== #
+# This file controls all user-configurable parameters for the pipeline.
+# Place it in the project root alongside the rawdata/, code/,
+# intermediate/, and outputdata/ directories.
+#
+# Pass the absolute path to this file as the last command-line argument in
+# each qsub/Rscript call (recommended), or rely on auto-detection: each
+# script looks for config.yaml in the current working directory and then
+# one level up.
+# =========================================================================== #
+
+# Absolute path to the project root directory.
+# All relative paths below are resolved from here.
+working_dir: ""
+
+# ---- File and Directory Paths -----------------------------------------------
+# All paths are relative to working_dir unless they start with /.
+paths:
+  fips_csv:            "rawdata/fips/US_States_FIPS_Codes.csv"
+  block_shapefile_dir: "rawdata/blocks/shapefiles/"
+  rawdata_dir:         "rawdata/"
+  crosswalk_dir:       "rawdata/crosswalk/"
+  fishnet_dir:         "intermediate/fishnet/"
+  extraction_pts_dir:  "intermediate/extraction_pts/"
+  block_outdir:        "outputdata/blocks/"
+  zcta_outdir:         "outputdata/zcta/"
+  nation_dir:          "outputdata/zcta/nationwide/"
+
+# ---- Fishnet Creation (script 00a) ------------------------------------------
+# Any year with available PRISM data can be used to create the fishnet;
+# the raster grid is identical across all years and variables.
+fishnet:
+  year: 2010
+  variable: "tmax"   # PRISM variable directory used to read the reference raster
+
+# ---- Processing Parameters --------------------------------------------------
+processing:
+  # Decennial census year(s) defining the block geography used in scripts
+  # 01a, 02a, and 03a.
+  decyear:
+    - 2010
+
+  # Calendar years of PRISM data to extract and aggregate (scripts 02a, 03a, 04).
+  years_to_process:
+    - 2010
+
+  # State FIPS filter.
+  # Use "Nationwide" to process all CONUS states (excluding AK and HI), or
+  # provide a list of 2-digit FIPS codes, e.g.:
+  #   state_fips:
+  #     - "01"
+  #     - "11"
+  state_fips: "Nationwide"
+
+  # PRISM variables to extract and aggregate.
+  # Temperature variables (tmax, tmin, tmean, tdmean) are automatically
+  # given a "_C" column-name suffix in block and ZCTA outputs.
+  # All other variables (e.g. ppt) keep their original name.
+  # To add a new variable, add a rawdata/<varname>/ directory with yearly
+  # subdirectories and include the variable name here.
+  exp_list:
+    - "tmax"
+    - "tmin"
+    - "tmean"
+    - "ppt"

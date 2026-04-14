@@ -36,45 +36,64 @@
 #       for each decennial census indicated in the User-Defined Parameters
 
 ########################## USER-DEFINED PARAMETERS #############################
-
-# Set up directories to read in and output data
+# Load configuration from config.yaml.
+# The config path can be passed as the third command-line argument (after year
+# and state index); if omitted, the script looks for config.yaml in the
+# current directory then one level up.
 #
-setwd("")
+library("yaml")
+args <- commandArgs(trailingOnly = TRUE)
+.config_path <- if (length(args) >= 3 && grepl("\\.ya?ml$", args[length(args)])) {
+  args[length(args)]
+} else if (file.exists("config.yaml")) {
+  "config.yaml"
+} else if (file.exists("../config.yaml")) {
+  "../config.yaml"
+} else {
+  stop("config.yaml not found. Pass its path as the last command-line argument.")
+}
+config <- yaml::read_yaml(.config_path)
 
-# This directory is used just to read in the state FIPS codes which are then
-# subset based on a bash input. 
+setwd(config$working_dir)
+
+# This directory is used just to read in the state FIPS codes.
 #
-fipsdir <- "rawdata/fips/"
+fipsdir <- config$paths$fips_dir
 
 # This directory should include the raw PRISM 800m raster files.
 # The structure below assumes the raw data have been stored as
 #       RawData --> variable directories --> year directories
-prismdir <- paste0("rawdata/")
+prismdir <- config$paths$rawdata_dir
 
 # This directory is where the linked points will be written to
-points_dir <- paste0("intermediate/extraction_pts/")
+points_dir <- config$paths$extraction_pts_dir
 
-# This directory is where the block data with daily PRISM variables will be 
+# This directory is where the block data with daily PRISM variables will be
 # saved to. Note that the output is written with the expectation of nested
 # directories within this outdir for decennial census geography and year of
 # PRISM data, ie:
 #       outdir/blocks/blocks_10/2000/
 # Please edit the output line at the end of the script as needed based on your
 # data structure
-block_outdir <- paste0("outputdata/blocks/")
+block_outdir <- config$paths$block_outdir
 
-# Enter variables to process
+# Variables to process
 #
-exp_list <- c("tmax", "tmin", "tmean", "ppt")
+exp_list <- as.character(unlist(config$processing$exp_list))
 
 # If running for a subset of states, list below. If running nationwide:
-#   state_fips <- "Nationwide"
-state_fips <- c("Nationwide")
+#   state_fips: "Nationwide"
+state_fips <- as.character(unlist(config$processing$state_fips))
 
 # Set decennial years to process output extraction points
 #
-decyear <- c(2010)
+decyear <- as.numeric(unlist(config$processing$decyear))
 
+# Temperature variable column names get a "_C" suffix; others keep their name
+temp_vars <- c("tmax", "tmin", "tmean", "tdmean")
+exp_list_zcta <- ifelse(exp_list %in% temp_vars, paste0(exp_list, "_C"), exp_list)
+
+library("yaml")
 library("terra")  # For raster data
 library("sf")     # For vector data
 library("plyr")
@@ -111,14 +130,13 @@ if (packageVersion("terra") < "1.5.34"   | packageVersion("sf") < "1.0.7" |
 # the stateFIPS is indexed using stateFIPS$StFIPS[b] below
 #     year <- 2010
 #     stateFIPS <- 11
-args <- commandArgs(trailingOnly = TRUE)
 year <- as.numeric(args[1])
 b <- as.numeric(args[2]) # state FIPS index
 
 # %%%%%%%%%%%%%%%%%%%% IDENTIFY STATE FIPS OF INTEREST %%%%%%%%%%%%%%%%%%%%%%% #
 # Reading in stateFIPS to allow for filtering by state in bash script
 #
-stateFIPS <- read.csv("/projectnb/acres/Census/RawData/US_States_FIPS_Codes.csv", stringsAsFactors = FALSE)
+stateFIPS <- read.csv(config$paths$fips_csv, stringsAsFactors = FALSE)
 stateFIPS$StFIPS <- formatC(stateFIPS$StFIPS, width = 2, format = "fg", flag = "0")
 stateFIPS <- stateFIPS %>% filter(!StFIPS %in% c("02", "15"))
 
@@ -312,31 +330,14 @@ for (decyear_in in decyear) {
   
   # Automated QC: missing data
   #
-  missing_tmax <- which(is.na(all_data$tmax_C))
-  missing_tmin <- which(is.na(all_data$tmin_C))
-  missing_tmea <- which(is.na(all_data$tmea_C))
-  missing_ppt <- which(is.na(all_data$ppt))
-  
-  if (length(missing_tmax) > 0 | length(missing_tmin) > 0 
-      | length(missing_tmea) > 0 |  length(missing_ppt) > 0) {
+  missing_counts <- sapply(exp_list_zcta, function(v) length(which(is.na(all_data[[v]]))))
+  if (any(missing_counts > 0)) {
     cat("WARNING: Note the number of missing block-days by variable: \n")
-    cat("Tmax:", length(missing_tmax), "\n")
-    cat("Tmin:", length(missing_tmin), "\n")
-    cat("Tmean:", length(missing_tmea), "\n")
-    cat("Precip:", length(missing_ppt), "\n")
-    
-    cat("The first few lines of missing Tmax (if any) are printed below: \n")
-    print(head(all_data[missing_tmax,]))
-    
-    cat("The first few lines of missing Tmin (if any) are printed below: \n")
-    print(head(all_data[missing_tmin,]))
-    
-    cat("The first few lines of missing Tmean (if any) are printed below: \n")
-    print(head(all_data[missing_tmea,]))
-    
-    cat("The first few lines of missing Precip (if any) are printed below: \n")
-    print(head(all_data[missing_ppt,]))
-    
+    for (v in names(missing_counts)[missing_counts > 0]) {
+      cat(v, ":", missing_counts[[v]], "\n")
+      cat("The first few lines of missing", v, "(if any) are printed below: \n")
+      print(head(all_data[which(is.na(all_data[[v]])), ]))
+    }
   } else { cat(":) No missing PRISM values! \n") }
   
   # Automated QC: impossible temperature values

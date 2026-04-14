@@ -56,41 +56,56 @@
 #       for each decennial census indicated in the User-Defined Parameters
 
 ########################## USER-DEFINED PARAMETERS #############################
+# Load configuration from config.yaml.
+# The config path can be passed as the second command-line argument (after the
+# state FIPS index); if omitted, the script looks for config.yaml in the
+# current directory then one level up.
+#
+library("yaml")
+args <- commandArgs(trailingOnly = TRUE)
+.config_path <- if (length(args) >= 2 && grepl("\\.ya?ml$", args[length(args)])) {
+  args[length(args)]
+} else if (file.exists("config.yaml")) {
+  "config.yaml"
+} else if (file.exists("../config.yaml")) {
+  "../config.yaml"
+} else {
+  stop("config.yaml not found. Pass its path as the last command-line argument.")
+}
+config <- yaml::read_yaml(.config_path)
+
+setwd(config$working_dir)
 
 # If running for a subset of states, list below. If running nationwide:
-#   state_fips <- "Nationwide"
-state_fips <- c("Nationwide")
+#   state_fips: "Nationwide"
+state_fips <- as.character(unlist(config$processing$state_fips))
 
 # Set decennial years to process output extraction points
 #
-decyear <- c(2010)
-
-# Set up directories to read in and output data
-#
-setwd("")
+decyear <- as.numeric(unlist(config$processing$decyear))
 
 # This directory is used just to read in the state FIPS codes which are then
 # subset based on a bash input. This file can be built by using tigris::states
 # and restricting to CONUS as below:
 #         fips <- tigris::states(year = 2020)
 #         fips <- fips[fips$REGION %in% c(1:4) & !fips$STATEFP %in% c("02", "15"),]
-fipsdir <- "rawdata/fips/"
+fipsdir <- config$paths$fips_dir
 
 # This directory should include the output from script 00a_Create_Fishnet
-fishdir <- "intermediate/fishnet/"
+fishdir <- config$paths$fishnet_dir
 
 # This directory should include the block census geographies, divided by
 # decennual census as needed (The script expects a subfolder labeled
 # as 2000, 2010 or 2020).
-block_geo <- "rawdata/blocks/shapefiles/"
+block_geo <- config$paths$block_shapefile_dir
 
 # This directory should include the raw PRISM 800m raster files.
 # The structure below assumes the raw data have been stored as
 #       RawData --> variable directories --> year directories
-prismdir <- paste0("rawdata/")
+prismdir <- config$paths$rawdata_dir
 
 # This directory is where the linked points will be written to
-points_dir <- paste0("intermediate/extraction_pts/")
+points_dir <- config$paths$extraction_pts_dir
 
 
 # Read in all packages 
@@ -126,10 +141,9 @@ if (packageVersion("terra") < "1.5.34"   | packageVersion("sf") < "1.0.7" |
   cat("WARNING: packages are outdated and may result in errors.") }
 
 # The following variables come from the command line when running as bash.
-# If you want to run for a single state/county/area, remove these lines and 
+# If you want to run for a single state/county/area, remove these lines and
 # update the stateFIPS below
 #
-args <- commandArgs(trailingOnly = TRUE)
 b <- as.numeric(args[1]) # state FIPS index
 
 # %%%%%%%%%%%%%%%%%%%% IDENTIFY STATE FIPS OF INTEREST %%%%%%%%%%%%%%%%%%%%%%% #
@@ -208,7 +222,8 @@ build_prism_ext_points <- function(decyear, state_in) {
   
   # Read in the fishnet created previously
   #
-  fishnet <- st_read(paste0(fishdir, "prism_fishnet_tmax_800m.gpkg"), layer="prism_fishnet_tmax_800m", wkt_filter=wkt)
+  fishnet_name <- paste0("prism_fishnet_", config$fishnet$variable, "_800m")
+  fishnet <- st_read(paste0(fishdir, fishnet_name, ".gpkg"), layer=fishnet_name, wkt_filter=wkt)
   
   # Does not matter which PRISM grid we bring in -- it will be the same grid regardless of date
   #

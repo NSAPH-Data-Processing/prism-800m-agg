@@ -42,6 +42,7 @@
 
 # This script population-weights block-level data up to ZCTA values
 #
+library("yaml")
 library("terra")  # For raster data
 library("sf")     # For vector data
 library("plyr")
@@ -64,43 +65,57 @@ sf_use_s2(FALSE)  # S2 is for computing distances, areas, etc. on a SPHERE (usin
 options(tigris_use_cache = TRUE)
 
 # %%%%%%%%%%%%%%%%%%%%%%% USER-DEFINED PARAMETERS %%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+# Load configuration from config.yaml.
+# The config path can be passed as the third command-line argument (after year
+# and state index); if omitted, the script looks for config.yaml in the
+# current directory then one level up.
+#
+args <- commandArgs(trailingOnly = TRUE)
+.config_path <- if (length(args) >= 3 && grepl("\\.ya?ml$", args[length(args)])) {
+  args[length(args)]
+} else if (file.exists("config.yaml")) {
+  "config.yaml"
+} else if (file.exists("../config.yaml")) {
+  "../config.yaml"
+} else {
+  stop("config.yaml not found. Pass its path as the last command-line argument.")
+}
+config <- yaml::read_yaml(.config_path)
 
-# List relevant variable names
-exp_list <- c("tmax_C", "tmin_C", "tmean_C", "ppt")
+setwd(config$working_dir)
+
+# Variables to aggregate to ZCTA.
+# Temperature variables (tmax, tmin, tmean, tdmean) get a "_C" suffix;
+# all others (e.g. ppt) keep their original name.
+temp_vars <- c("tmax", "tmin", "tmean", "tdmean")
+exp_list_raw <- as.character(unlist(config$processing$exp_list))
+exp_list <- ifelse(exp_list_raw %in% temp_vars, paste0(exp_list_raw, "_C"), exp_list_raw)
 
 # Create decennial period indicator. Block data is only available from the decennial
 # census
-decyear <- c(2010)
+decyear <- as.numeric(unlist(config$processing$decyear))
 
 # If running for a subset of states, list below. If running nationwide:
-#   state_fips <- "Nationwide"
-state_fips <- c("Nationwide")
+#   state_fips: "Nationwide"
+state_fips <- as.character(unlist(config$processing$state_fips))
 
-# Set directories
-#
-setwd("")
-
-# This directory is where the block data with daily PRISM variables will be 
+# This directory is where the block data with daily PRISM variables will be
 # saved to. Note that the output is written with the expectation of nested
 # directories within this outdir for decennial census geography and year of
 # PRISM data, ie:
 #       outdir/blocks/blocks_10/2000/
 # Please edit the output line at the end of the script as needed based on your
 # data structure
-block_outdir <-  paste0("outputdata/blocks/")
+block_outdir <- config$paths$block_outdir
 
-# This directory is where the block data with daily PRISM variables will be 
-# saved to. Note that the output is written with the expectation of nested
-# directories within this outdir for decennial census geography and year of
-# PRISM data, ie:
+# This directory is where the ZCTA-level data will be saved to, with nested
+# directories for decennial census geography, ie:
 #       outdir/zcta/zcta_10/
-# Please edit the output line at the end of the script as needed based on your
-# data structure
-zcta_outdir <- paste0("outputdata/zcta/")
+zcta_outdir <- config$paths$zcta_outdir
 
 # This is where the block to ZCTA crosswalk should be stored.
 # See https://github.com/Climate-CAFE/block2zcta_xwalk for details
-cross_dir <- paste0("rawdata/crosswalk/")
+cross_dir <- config$paths$crosswalk_dir
 
 # Check package version numbers
 #
@@ -116,14 +131,13 @@ sumfun <- function(x) { ifelse(all(is.na(x)), return(NA), return(sum(x, na.rm = 
 
 # Read in command line arguments
 #
-args <- commandArgs(trailingOnly = TRUE)
 year <- as.numeric(args[1])
 b <- as.numeric(args[2]) # state FIPS index
 
 # %%%%%%%%%%%%%%%%%%%% IDENTIFY STATE FIPS OF INTEREST %%%%%%%%%%%%%%%%%%%%%%% #
 # Reading in stateFIPS to allow for filtering by state in bash script
 #
-stateFIPS <- read.csv("/projectnb/acres/Census/RawData/US_States_FIPS_Codes.csv", stringsAsFactors = FALSE)
+stateFIPS <- read.csv(config$paths$fips_csv, stringsAsFactors = FALSE)
 stateFIPS$StFIPS <- formatC(stateFIPS$StFIPS, width = 2, format = "fg", flag = "0")
 stateFIPS <- stateFIPS %>% filter(!StFIPS %in% c("02", "15"))
 
@@ -282,36 +296,21 @@ block2zcta_walk <- function(varnames, state_in, year, decyear) {
   
   # Automated QC: missing data
   #
-  missing_tmax <- which(is.na(final$tmax_C))
-  missing_tmin <- which(is.na(final$tmin_C))
-  missing_tmea <- which(is.na(final$tmeam_C))
-  missing_ppt <- which(is.na(final$ppt))
-  
-  if (length(missing_tmax) > 0 | length(missing_tmin) > 0 | 
-      length(missing_tmea) > 0 | length(missing_ppt) > 0) {
-    cat("WARNING: Note the number of missing block-days by variable: \n")
-    cat("Tmax:", length(missing_tmax), "\n")
-    cat("Tmin:", length(missing_tmin), "\n")
-    cat("Tmean:", length(missing_tmea), "\n")
-    cat("Precip:", length(missing_ppt), "\n")
-    
-    cat("The first few lines of missing Tmax (if any) are printed below: \n")
-    print(head(final[missing_tmax,]))
-    
-    cat("The first few lines of missing Tmin (if any) are printed below: \n")
-    print(head(final[missing_tmin,]))
-    
-    cat("The first few lines of missing Tmean (if any) are printed below: \n")
-    print(head(final[missing_tmea,]))
-    
-    cat("The first few lines of missing Precip (if any) are printed below: \n")
-    print(head(final[missing_ppt,]))
-  } else { cat(":) No missing temperature values! \n") }
-  
-  # Check if all of the missing vars are in ZCTAs with no population
-  # Subset to missing values
+  missing_counts <- sapply(exp_list, function(v) length(which(is.na(final[[v]]))))
+  if (any(missing_counts > 0)) {
+    cat("WARNING: Note the number of missing ZCTA-days by variable: \n")
+    for (v in names(missing_counts)[missing_counts > 0]) {
+      cat(v, ":", missing_counts[[v]], "\n")
+      cat("The first few lines of missing", v, "(if any) are printed below: \n")
+      print(head(final[which(is.na(final[[v]])), ]))
+    }
+  } else { cat(":) No missing PRISM values! \n") }
+
+  # Check if all of the missing vars are in ZCTAs with no population.
+  # Uses the first variable in exp_list as the missingness indicator.
   #
-  ZCTA_missing <- filter(final, !is.na(PRISM_Date) & is.na(tmax_C))
+  first_var <- exp_list[1]
+  ZCTA_missing <- filter(final, !is.na(PRISM_Date) & is.na(!!sym(first_var)))
   
   # Subset block-ZCTA cross to missing data
   #
