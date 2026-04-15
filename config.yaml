@@ -13,7 +13,12 @@
 
 # Absolute path to the project root directory.
 # All relative paths below are resolved from here.
-working_dir: ""
+working_dir: "/n/dominici_lab/Lab/data_processing/shreya_prism_800m/prism-800m-agg"
+
+# R version to load via the cluster module system.
+# Must match an available module on your cluster (check: module avail R).
+# All pipeline scripts are tested against this version.
+r_version: "4.4.1"
 
 # ---- File and Directory Paths -----------------------------------------------
 # All paths are relative to working_dir unless they start with /.
@@ -64,4 +69,9 @@ processing:
     - "tmax"
     - "tmin"
     - "tmean"
+    - "tdmean"
     - "ppt"
+    - "vpdmax"
+    - "vpdmin"
+    - "solslope"
+    - "soltotal"

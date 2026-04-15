@@ -93,7 +93,6 @@ decyear <- as.numeric(unlist(config$processing$decyear))
 temp_vars <- c("tmax", "tmin", "tmean", "tdmean")
 exp_list_zcta <- ifelse(exp_list %in% temp_vars, paste0(exp_list, "_C"), exp_list)
 
-library("yaml")
 library("terra")  # For raster data
 library("sf")     # For vector data
 library("plyr")

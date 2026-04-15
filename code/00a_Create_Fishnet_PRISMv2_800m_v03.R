@@ -85,6 +85,11 @@ year <- config$fishnet$year
 #       RawData --> variable directories --> year directories
 prismdir <- paste0(config$paths$rawdata_dir, config$fishnet$variable, "/", year, "/")
 
+if (!dir.exists(prismdir)) {
+  stop(paste0("PRISM input directory does not exist: ", prismdir,
+              "\nCheck config.yaml working_dir and paths.rawdata_dir."))
+}
+
 # The directory below is where the final fishnet will be output
 outdir <- config$paths$fishnet_dir
 
@@ -98,11 +103,15 @@ outdir <- config$paths$fishnet_dir
 # rasters and then extract the first in the stack for creation of the fishnet
 # below. Any raster works since they have the same grid
 #
-prism_files <- list.files(prismdir, pattern=paste0('\\.tif$'), full.names = F)
+prism_files <- list.files(prismdir, pattern = "\\.tif$", full.names = TRUE)
+
+if (length(prism_files) == 0) {
+  stop(paste0("No .tif files found in: ", prismdir,
+              "\nDownload or place PRISM rasters in this folder before running fishnet."))
+}
 
 # Stack all of the daily files by year
 #
-prism_files <- paste0(prismdir, prism_files)
 tmax_raster <- rast(prism_files[1])
 
 # %%%%%%%%%%%%%%%%%%%% CREATE A FISHNET GRID OF THE RASTER EXTENT %%%%%%%%%%%% #
