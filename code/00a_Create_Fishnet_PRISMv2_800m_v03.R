@@ -103,10 +103,12 @@ outdir <- config$paths$fishnet_dir
 # rasters and then extract the first in the stack for creation of the fishnet
 # below. Any raster works since they have the same grid
 #
-prism_files <- list.files(prismdir, pattern = "\\.tif$", full.names = TRUE)
+raster_pattern <- "\\.(tif|tiff|bil|img)$"
+prism_files <- list.files(prismdir, pattern = raster_pattern, full.names = TRUE, ignore.case = TRUE)
 
 if (length(prism_files) == 0) {
   stop(paste0("No .tif files found in: ", prismdir,
+              "\nExpected at least one raster file matching: ", raster_pattern,
               "\nDownload or place PRISM rasters in this folder before running fishnet."))
 }
 

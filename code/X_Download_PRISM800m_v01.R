@@ -1,176 +1,223 @@
-
-# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
-# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% OVERVIEW  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
-# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+# =========================================================================== #
+# X_Download_PRISM800m_v01.R
+# Download PRISM 800m daily data and supporting inputs for this pipeline.
 #
-# Downloading PRISM 800m and accompanying data for prism-800m-agg pipeline (ie:
-# census geographies. Adapted from https://github.com/Climate-CAFE/population_weighting_raster_data
+# Usage:
+#   Rscript code/X_Download_PRISM800m_v01.R /abs/path/to/config.yaml
 #
-# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
-# %%%%%%%%%%%%%%%%%% STEP 1: DOWNLOAD PRISM DATA FROM FTP %%%%%%%%%%%%%%%%%%%% #
-# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
-#
-# Most applications do not need the enhanced resolution, and one should note
-# that the higher-resolution product does not resolve urban heat islands; the modeling
-# methodology does not incorporate urbanization characteristics such as LST, albedo,
-# or imperviousness of surfaces (which are proxy indicators of UHI).
-#
-options(timeout=1000) # Set the max timeout (in seconds) for downloading files
+# If config path is omitted, script looks for config.yaml in cwd then ../.
+# =========================================================================== #
 
-# Set working directory
-#
-setwd("C:/Users/zpopp/OneDrive - Boston University/Desktop/CAFE/PRISM800m/prism-800m-agg/")
+library(yaml)
+library(tigris)
+library(sf)
 
-# Full pathway of the directory where your input data will be stored.
-input_data_dir <- "rawdata/"   
+options(timeout = 3600)
+options(tigris_use_cache = TRUE)
 
-# Set the directory for where the .zip PRISM files
-# will be saved. If changing this directory, 
-# be sure to keep the final forward slash
-zip_file_dir <- "rawdata/zip_files/" 
+# ---- Load config ------------------------------------------------------------
+args <- commandArgs(trailingOnly = TRUE)
+config_path <- if (length(args) > 0 && grepl("\\.ya?ml$", args[length(args)])) {
+  args[length(args)]
+} else if (file.exists("config.yaml")) {
+  "config.yaml"
+} else if (file.exists("../config.yaml")) {
+  "../config.yaml"
+} else {
+  stop("config.yaml not found. Pass its path as the last command-line argument.")
+}
 
-# Identify the PRISM variables that you want to download using the syntax from
-# the PRISM FTP. For the purpose of this tutorial, we are just using "tmax" and "tmin".
-# Other options available: c("ppt", "tdmean", "tmean", "tmin", "vpdmax", "vpdmin")
-#
-vars <- c("ppt", "tdmean", "tmean", "tmin", "tmax")
+config <- yaml::read_yaml(config_path)
+setwd(config$working_dir)
 
-# The baseline URL for the PRISM FTP directory for daily data. Note that
-# other time steps are available as well. Explore the FTP site to find the
-# relevant URL and syntax for the data sets that you need.
-#
-URL <- "https://data.prism.oregonstate.edu/time_series/us/an/800m/"
+# ---- Config-derived paths and parameters -----------------------------------
+rawdata_dir <- sub("/+$", "", config$paths$rawdata_dir)
+temp_zip_dir <- file.path(rawdata_dir, "zip_files")
+dir.create(temp_zip_dir, recursive = TRUE, showWarnings = FALSE)
 
-# Identify the years of data you need. NOTE: data < 6 months old are provisional.
-# Use "stable" data whenever possible, and note that the filename will be different
-# for provisional data (you will have to modify the code below accordingly).
-#
-years_data <- c(2010) # If downloading multiple years, enter range here, e.g., 2010:2020
+vars <- unique(as.character(unlist(config$processing$exp_list)))
+years_data <- as.integer(unlist(config$processing$years_to_process))
 
-for (i in 1:length(vars)) { 
-  
-  var <- vars[i]
-  
-  cat("---------------------------------------------------------------------\n")
-  cat("Beginning download of", var, "PRISM data: variable", i, "of", length(vars), "\n")
-  
-  for (j in 1:length(years_data)) {
-    
-    year_data <- years_data[j]
-    
-    cat(".....Processing", year_data, "data \n")
-    
-    # Identify all of the days in that particular year in the format YYYYMMDD
-    # This step is needed to account for Leap Days
-    #
-    days <- format(seq(as.Date(paste0(year_data, "-01-01")),
-                       as.Date(paste0(year_data, "-01-31")), by = "days"),
-                   format="%Y%m%d")
-    
-    for (k in 1:length(days)) {
-      
-      day <- days[k]
-      
-      dl_link <- paste0(URL, var, "/daily/", year_data, "/prism_", var, "_us_30s_", days[k], ".zip")
-      dl_file <- paste0(zip_file_dir, "PRISM_", var, "_us_30s_", day, ".zip")
-      
-      # Check to see if the file already exists; download if not
-      #
-      if (file.exists(dl_file)) {
-        
-        cat("Zip file for day", day, "already downloaded. Proceeding to next day. \n")
-        
-      } else {
-        
-        dl <- try(download.file(dl_link, destfile = dl_file))
-        
-        # Determine if the download failed
-        #
-        if (class(dl) == "try-error") {
-          
-          cat("ERROR! File did not download successfully for", day, "\n")
-          cat("..... Pausing for 10 seconds and re-trying. \n")
-          
-          k <- 10
-          while (k > 0) {
-            
-            cat("..... Attempt", ((10 - k) + 1), "out of 10... \n")
-            Sys.sleep(10) # Pause for 10 seconds
-            dl <- try(download.file(dl_link, destfile = dl_file))
-            
-            if (class(dl) != "try-error") { 
-              
-              cat("..... :) success! Moving on to next file \n"); break 
-              
-            } else {
-              
-              cat("..... :( unsuccessful! \n")
-              k <- k - 1 
-            }
-          }
-          
-          if (k == 0) { cat("..... Error unresolved; file for", day, "has still not been downloaded. \n"); break }
-          
-        } else { cat(":) file for", day, "downloaded successfully \n") }   
+if (length(vars) == 0 || length(years_data) == 0) {
+  stop("No variables or years_to_process found in config.yaml under processing.")
+}
+
+base_url <- "https://data.prism.oregonstate.edu/time_series/us/an/800m"
+
+# ---- Helpers ----------------------------------------------------------------
+download_with_retry <- function(url, destfile, attempts = 5, wait_seconds = 10) {
+  for (attempt in seq_len(attempts)) {
+    status <- tryCatch(
+      utils::download.file(url = url, destfile = destfile, mode = "wb", quiet = TRUE),
+      error = function(e) e
+    )
+
+    if (is.numeric(status) && status == 0 && file.exists(destfile)) {
+      return(TRUE)
+    }
+
+    if (attempt < attempts) {
+      message("..... Download failed (attempt ", attempt, "/", attempts,
+              "). Retrying in ", wait_seconds, " seconds.")
+      Sys.sleep(wait_seconds)
+    }
+  }
+
+  FALSE
+}
+
+day_already_extracted <- function(target_dir, day_yyyymmdd) {
+  if (!dir.exists(target_dir)) return(FALSE)
+  extracted <- list.files(
+    target_dir,
+    pattern = paste0(day_yyyymmdd, ".*\\.(tif|tiff|bil|img)$"),
+    ignore.case = TRUE
+  )
+  length(extracted) > 0
+}
+
+extract_tif_member <- function(zipfile, exdir) {
+  members <- utils::unzip(zipfile, list = TRUE)
+  tif_members <- members$Name[grepl("\\.tif$", members$Name, ignore.case = TRUE)]
+
+  if (length(tif_members) == 0) {
+    stop("No .tif member found in zip archive: ", zipfile)
+  }
+
+  utils::unzip(zipfile, files = tif_members, exdir = exdir, overwrite = FALSE)
+  unlink(zipfile)
+}
+
+# ---- STEP 1: Download and extract PRISM daily files ------------------------
+message("=== STEP 1: Download PRISM 800m daily data ===")
+
+failed_downloads <- character(0)
+
+for (var in vars) {
+  message("---------------------------------------------------------------------")
+  message("Variable: ", var)
+
+  for (year_data in years_data) {
+    message("..... Processing year ", year_data)
+
+    out_dir <- file.path(rawdata_dir, var, as.character(year_data))
+    dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+
+    days <- format(
+      seq(as.Date(paste0(year_data, "-01-01")), as.Date(paste0(year_data, "-12-31")), by = "day"),
+      format = "%Y%m%d"
+    )
+
+    for (day in days) {
+      zip_name <- paste0("prism_", var, "_us_30s_", day, ".zip")
+      dl_link <- paste0(base_url, "/", var, "/daily/", year_data, "/", zip_name)
+      dl_file <- file.path(temp_zip_dir, zip_name)
+
+      if (day_already_extracted(out_dir, day)) {
+        next
       }
-      
-      # Unzip the downloaded files
-      # Recommended to delete the original zip files manually after downloading is complete
-      #
-      unzip(dl_file, exdir = paste0(input_data_dir, var, "/", year_data, "/"))
+
+      if (!file.exists(dl_file)) {
+        ok <- download_with_retry(dl_link, dl_file)
+        if (!ok) {
+          failed_downloads <- c(failed_downloads, paste(var, day, sep = ":"))
+          message("..... ERROR: Failed to download ", dl_link)
+          next
+        }
+      }
+
+      unzip_ok <- tryCatch({
+        extract_tif_member(dl_file, out_dir)
+        TRUE
+      }, error = function(e) {
+        message("..... ERROR: unzip failed for ", dl_file, " (", conditionMessage(e), ")")
+        FALSE
+      })
+
+      if (!unzip_ok) {
+        failed_downloads <- c(failed_downloads, paste(var, day, sep = ":"))
+      }
     }
   }
 }
 
-# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
-# %%%%%%%%%%%%%%%%%% STEP 2: DOWNLOAD BLOCK SHAPEFILES (TIGRIS) %%%%%%%%%%%%%% #
-# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
-#
-library(tigris)
-library(sf)
+if (length(failed_downloads) > 0) {
+  message("\nDownload/unzip failures (", length(failed_downloads), "):")
+  message(paste0("  - ", failed_downloads, collapse = "\n"))
+} else {
+  message("\nAll requested PRISM downloads and extractions completed.")
+}
 
-# Full pathway of the directory where your input data will be stored.
-block_geo <- "rawdata/blocks/shapefiles/"
+# ---- STEP 2: Download census block shapefiles via tigris -------------------
+message("\n=== STEP 2: Download block shapefiles ===")
 
-# Set year of census data to download and stateFIPS
-decyear <- 2010
-stateFIPS <- "11"
+block_geo_root <- config$paths$block_shapefile_dir
+if (!dir.exists(block_geo_root)) {
+  dir.create(block_geo_root, recursive = TRUE, showWarnings = FALSE)
+}
 
-# We will download 2010 data for DC
-#
-dc_blocks <- tigris::blocks(year = decyear, state = stateFIPS)
+decyears <- as.integer(unlist(config$processing$decyear))
+state_fips_cfg <- config$processing$state_fips
 
-# Write to file
-#
-st_write(dc_blocks, paste0(block_geo, decyear, "/tl_", decyear, "_", stateFIPS, "_tabblock10.shp"))
+get_state_fips <- function(state_fips_config) {
+  if (is.character(state_fips_config) && length(state_fips_config) == 1 && state_fips_config == "Nationwide") {
+    st <- tigris::states(year = 2020, cb = TRUE)
+    st <- st[st$REGION %in% c("1", "2", "3", "4") & !st$STATEFP %in% c("02", "15"), ]
+    return(sort(unique(st$STATEFP)))
+  }
 
-# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
-# %%%%%%%%%%%%%%%%%% STEP 3: BUILD FIPS DATASET FOR USE IN BASH %%%%%%%%%%%%%% #
-# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+  fips <- as.character(unlist(state_fips_config))
+  sprintf("%02s", fips)
+}
 
-# Set directory
-#
-fipsdir <- "rawdata/fips/"
+state_fips <- get_state_fips(state_fips_cfg)
 
-# Download states
-#
-fips <- tigris::states(year = 2020)
+for (decyear in decyears) {
+  year_dir <- file.path(block_geo_root, as.character(decyear))
+  dir.create(year_dir, recursive = TRUE, showWarnings = FALSE)
 
-# Subset to CONUS
-#
-fips <- fips[fips$REGION %in% c(1:4) & !fips$STATEFP %in% c("02", "15"),]
+  for (state in state_fips) {
+    shp_stem <- paste0("tl_", decyear, "_", state, "_tabblock", substr(as.character(decyear), 3, 4))
+    shp_file <- file.path(year_dir, paste0(shp_stem, ".shp"))
 
-# Save as data.frame
-#
+    if (file.exists(shp_file)) {
+      next
+    }
+
+    blocks_sf <- tryCatch(
+      tigris::blocks(year = decyear, state = state),
+      error = function(e) {
+        message("..... WARNING: Could not download blocks for year ", decyear,
+                ", state ", state, " (", conditionMessage(e), ")")
+        NULL
+      }
+    )
+
+    if (!is.null(blocks_sf)) {
+      tryCatch(
+        sf::st_write(blocks_sf, shp_file, delete_layer = TRUE, quiet = TRUE),
+        error = function(e) {
+          message("..... WARNING: Could not write shapefile ", shp_file,
+                  " (", conditionMessage(e), ")")
+        }
+      )
+    }
+  }
+}
+
+# ---- STEP 3: Build CONUS FIPS dataset --------------------------------------
+message("\n=== STEP 3: Build FIPS CSV ===")
+
+fips_dir <- dirname(config$paths$fips_csv)
+dir.create(fips_dir, recursive = TRUE, showWarnings = FALSE)
+
+fips <- tigris::states(year = 2020, cb = TRUE)
+fips <- fips[fips$REGION %in% c("1", "2", "3", "4") & !fips$STATEFP %in% c("02", "15"), ]
 fips <- as.data.frame(fips)
 fips$geometry <- NULL
-
-# Rename and save columns needed
-#
 fips$StFIPS <- fips$STATEFP
 fips <- fips[c("StFIPS", "STUSPS", "NAME")]
 
-# Save to file
-#
-write.csv(fips, paste0(fipsdir, "US_States_FIPS_Codes.csv"), 
-          row.names = FALSE)
+utils::write.csv(fips, config$paths$fips_csv, row.names = FALSE)
+
+message("Done.")
