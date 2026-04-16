@@ -84,12 +84,8 @@ state_fips <- as.character(unlist(config$processing$state_fips))
 #
 decyear <- as.numeric(unlist(config$processing$decyear))
 
-# This directory is used just to read in the state FIPS codes which are then
-# subset based on a bash input. This file can be built by using tigris::states
-# and restricting to CONUS as below:
-#         fips <- tigris::states(year = 2020)
-#         fips <- fips[fips$REGION %in% c(1:4) & !fips$STATEFP %in% c("02", "15"),]
-fipsdir <- config$paths$fips_dir
+# Canonical FIPS lookup CSV path.
+fips_csv <- config$paths$fips_csv
 
 # This directory should include the output from script 00a_Create_Fishnet
 fishdir <- config$paths$fishnet_dir
@@ -149,7 +145,20 @@ b <- as.numeric(args[1]) # state FIPS index
 # %%%%%%%%%%%%%%%%%%%% IDENTIFY STATE FIPS OF INTEREST %%%%%%%%%%%%%%%%%%%%%%% #
 # Reading in stateFIPS to allow for filtering by state in bash script
 #
-stateFIPS <- read.csv(paste0(fipsdir, "US_States_FIPS_Codes.csv"), stringsAsFactors = FALSE)
+stateFIPS <- read.csv(fips_csv, stringsAsFactors = FALSE)
+if (!"StFIPS" %in% names(stateFIPS) && "state_fips" %in% names(stateFIPS)) {
+  names(stateFIPS)[names(stateFIPS) == "state_fips"] <- "StFIPS"
+}
+if (!"STUSPS" %in% names(stateFIPS) && "state_abb" %in% names(stateFIPS)) {
+  names(stateFIPS)[names(stateFIPS) == "state_abb"] <- "STUSPS"
+}
+if (!"NAME" %in% names(stateFIPS) && "state_name" %in% names(stateFIPS)) {
+  names(stateFIPS)[names(stateFIPS) == "state_name"] <- "NAME"
+}
+
+if (!"StFIPS" %in% names(stateFIPS)) {
+  stop("FIPS lookup file must include 'StFIPS' (or 'state_fips').")
+}
 stateFIPS$StFIPS <- formatC(stateFIPS$StFIPS, width = 2, format = "fg", flag = "0")
 stateFIPS <- stateFIPS %>% filter(!StFIPS %in% c("02", "15"))
 
