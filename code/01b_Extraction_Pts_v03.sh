@@ -1,8 +1,9 @@
 #!/bin/bash
 #SBATCH -J prism_pts           # Job name
 #SBATCH -p hsph                # Partition / queue
+#SBATCH --array=1-49           # One task per CONUS state
 #SBATCH -c 4                   # Cores per array task
-#SBATCH --mem 32GB             # Memory per array task
+#SBATCH --mem 64GB             # Memory per array task
 #SBATCH -t 0-08:00             # Time limit (D-HH:MM)
 #SBATCH -o prism_pts_%a.out    # Log file (%a = array task index)
 
@@ -12,6 +13,8 @@ R_VERSION="4.4.1"                        # must match r_version in config.yaml
 ## ---------------------------------------------------------------------------
 
 CONFIG="${PROJECT_DIR}/config.yaml"
+
+: "${SLURM_ARRAY_TASK_ID:?This script must be submitted as a Slurm array job. Use: sbatch code/01b_Extraction_Pts_v03.sh}"
 
 cd $PROJECT_DIR
 
