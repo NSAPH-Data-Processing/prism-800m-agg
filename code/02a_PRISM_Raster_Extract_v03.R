@@ -89,6 +89,46 @@ state_fips <- as.character(unlist(config$processing$state_fips))
 #
 decyear <- as.numeric(unlist(config$processing$decyear))
 
+valid_decyears <- c(2000, 2010, 2020)
+
+map_decyear_by_year <- function(year, decyear_config) {
+  decyear_config <- as.numeric(decyear_config)
+  decyear_config <- decyear_config[!is.na(decyear_config)]
+
+  if (length(decyear_config) == 1 && decyear_config %in% valid_decyears) {
+    return(decyear_config)
+  }
+
+  auto_map <- length(decyear_config) == 0 || any(!decyear_config %in% valid_decyears)
+  if (auto_map) {
+    if (year < 2010) {
+      return(2000)
+    }
+    if (year < 2020) {
+      return(2010)
+    }
+    return(2020)
+  }
+
+  if (year < 2010 && 2000 %in% decyear_config) {
+    return(2000)
+  }
+  if (year >= 2010 && year < 2020 && 2010 %in% decyear_config) {
+    return(2010)
+  }
+  if (year >= 2020 && 2020 %in% decyear_config) {
+    return(2020)
+  }
+
+  decyear_config <- sort(unique(decyear_config))
+  decyear_prior <- decyear_config[decyear_config <= year]
+  if (length(decyear_prior) > 0) {
+    return(max(decyear_prior))
+  }
+
+  return(min(decyear_config))
+}
+
 # Temperature variable column names get a "_C" suffix; others keep their name
 temp_vars <- c("tmax", "tmin", "tmean", "tdmean")
 exp_list_zcta <- ifelse(exp_list %in% temp_vars, paste0(exp_list, "_C"), exp_list)
@@ -292,74 +332,72 @@ process_prism_blocks <- function(exp_in, state_in, year, decyear) {
 
 ########################## RUNNING FUNCTIONS  #################################
 
-# Loop through decennial geographies and exposures to get full output
-#
-for (decyear_in in decyear) {
-  for (exp_in in exp_list) {
-    
-    cat("Running function for ", stateFIPS, " ", decyear_in, "\n")
-    
-    # Get decennial year marker
-    #
-    decyear_abr <- substr(decyear_in, 3, 4)
-    
-    # Run function for exposure input, state, year, and decennial year
-    #
-    output <- process_prism_blocks(exp_in = exp_in, 
-                                   state_in = stateFIPS, 
-                                   year = year, 
-                                   decyear = decyear_in)
-    
-    # Grab GEOID to be used in building data with all exposures
-    #
-    GEO_ID <- names(output)[grepl("GEOID|BLKID", names(output))]
-    
-    if (exp_in == exp_list[1]) {
-      all_data <- output
-    } else {
-      all_data <- left_join(all_data, output, by = c(GEO_ID, "PRISM_Date"))
-    }
-  }
-  
-  # Check output for decennial input:
-  #
-  cat("The final output has", dim(all_data)[1], "rows. \n")
-  cat("The first few lines of the output are: \n")
-  print(head(all_data))
-  
-  # Automated QC: missing data
-  #
-  missing_counts <- sapply(exp_list_zcta, function(v) length(which(is.na(all_data[[v]]))))
-  if (any(missing_counts > 0)) {
-    cat("WARNING: Note the number of missing block-days by variable: \n")
-    for (v in names(missing_counts)[missing_counts > 0]) {
-      cat(v, ":", missing_counts[[v]], "\n")
-      cat("The first few lines of missing", v, "(if any) are printed below: \n")
-      print(head(all_data[which(is.na(all_data[[v]])), ]))
-    }
-  } else { cat(":) No missing PRISM values! \n") }
-  
-  # Automated QC: impossible temperature values
-  #
-  num_temp_errors <- length(which(all_data$Tmax_C < all_data$Tmea_C |
-                                    all_data$Tmax_C < all_data$Tmin_C |
-                                    all_data$Tmin_C > all_data$Tmea_C |
-                                    all_data$Tmin_C > all_data$Tmax_C))
-  
-  options(scipen = 999)
-  if (num_temp_errors > 0) { 
-    cat("ERROR: impossible temperature values.\n")
-    cat(paste0(round((num_temp_errors / dim(all_data)[1]) * 100, 4), "%"), "of block-days are incorrect. \n")
-    cat("Applicable rows printed below: \n")
-    print(all_data[which(all_data$Tmax_C < all_data$Tmea_C |
-                              all_data$Tmax_C < all_data$Tmin_C |
-                              all_data$Tmin_C > all_data$Tmea_C |
-                              all_data$Tmin_C > all_data$Tmax_C),])
-  } else { print(":) all temperature values are of correct *relative* magnitude") }
+# Select decennial geography based on PRISM year, then loop exposures
+decyear_in <- map_decyear_by_year(year, decyear)
 
-  # Save result 
+for (exp_in in exp_list) {
+  cat("Running function for ", stateFIPS, " ", decyear_in, "\n")
+  
+  # Get decennial year marker
   #
-  saveRDS(all_data, paste0(paste0(block_outdir, "blocks_", decyear_abr, "/", year, "/tl", decyear_abr, "_prism_daily_", year, "_", stateFIPS, ".rds")))
+  decyear_abr <- substr(decyear_in, 3, 4)
+  
+  # Run function for exposure input, state, year, and decennial year
+  #
+  output <- process_prism_blocks(exp_in = exp_in, 
+                                 state_in = stateFIPS, 
+                                 year = year, 
+                                 decyear = decyear_in)
+  
+  # Grab GEOID to be used in building data with all exposures
+  #
+  GEO_ID <- names(output)[grepl("GEOID|BLKID", names(output))]
+  
+  if (exp_in == exp_list[1]) {
+    all_data <- output
+  } else {
+    all_data <- left_join(all_data, output, by = c(GEO_ID, "PRISM_Date"))
+  }
 }
+
+# Check output for decennial input:
+#
+cat("The final output has", dim(all_data)[1], "rows. \n")
+cat("The first few lines of the output are: \n")
+print(head(all_data))
+
+# Automated QC: missing data
+#
+missing_counts <- sapply(exp_list_zcta, function(v) length(which(is.na(all_data[[v]]))))
+if (any(missing_counts > 0)) {
+  cat("WARNING: Note the number of missing block-days by variable: \n")
+  for (v in names(missing_counts)[missing_counts > 0]) {
+    cat(v, ":", missing_counts[[v]], "\n")
+    cat("The first few lines of missing", v, "(if any) are printed below: \n")
+    print(head(all_data[which(is.na(all_data[[v]])), ]))
+  }
+} else { cat(":) No missing PRISM values! \n") }
+
+# Automated QC: impossible temperature values
+#
+num_temp_errors <- length(which(all_data$Tmax_C < all_data$Tmea_C |
+                                  all_data$Tmax_C < all_data$Tmin_C |
+                                  all_data$Tmin_C > all_data$Tmea_C |
+                                  all_data$Tmin_C > all_data$Tmax_C))
+
+options(scipen = 999)
+if (num_temp_errors > 0) { 
+  cat("ERROR: impossible temperature values.\n")
+  cat(paste0(round((num_temp_errors / dim(all_data)[1]) * 100, 4), "%"), "of block-days are incorrect. \n")
+  cat("Applicable rows printed below: \n")
+  print(all_data[which(all_data$Tmax_C < all_data$Tmea_C |
+                            all_data$Tmax_C < all_data$Tmin_C |
+                            all_data$Tmin_C > all_data$Tmea_C |
+                            all_data$Tmin_C > all_data$Tmax_C),])
+} else { print(":) all temperature values are of correct *relative* magnitude") }
+
+# Save result 
+#
+saveRDS(all_data, paste0(paste0(block_outdir, "blocks_", decyear_abr, "/", year, "/tl", decyear_abr, "_prism_daily_", year, "_", stateFIPS, ".rds")))
 
 

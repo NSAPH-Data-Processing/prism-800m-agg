@@ -95,6 +95,46 @@ exp_list <- ifelse(exp_list_raw %in% temp_vars, paste0(exp_list_raw, "_C"), exp_
 # census
 decyear <- as.numeric(unlist(config$processing$decyear))
 
+valid_decyears <- c(2000, 2010, 2020)
+
+map_decyear_by_year <- function(year, decyear_config) {
+  decyear_config <- as.numeric(decyear_config)
+  decyear_config <- decyear_config[!is.na(decyear_config)]
+
+  if (length(decyear_config) == 1 && decyear_config %in% valid_decyears) {
+    return(decyear_config)
+  }
+
+  auto_map <- length(decyear_config) == 0 || any(!decyear_config %in% valid_decyears)
+  if (auto_map) {
+    if (year < 2010) {
+      return(2000)
+    }
+    if (year < 2020) {
+      return(2010)
+    }
+    return(2020)
+  }
+
+  if (year < 2010 && 2000 %in% decyear_config) {
+    return(2000)
+  }
+  if (year >= 2010 && year < 2020 && 2010 %in% decyear_config) {
+    return(2010)
+  }
+  if (year >= 2020 && 2020 %in% decyear_config) {
+    return(2020)
+  }
+
+  decyear_config <- sort(unique(decyear_config))
+  decyear_prior <- decyear_config[decyear_config <= year]
+  if (length(decyear_prior) > 0) {
+    return(max(decyear_prior))
+  }
+
+  return(min(decyear_config))
+}
+
 # If running for a subset of states, list below. If running nationwide:
 #   state_fips: "Nationwide"
 state_fips <- as.character(unlist(config$processing$state_fips))
@@ -346,27 +386,24 @@ block2zcta_walk <- function(varnames, state_in, year, decyear) {
   return(final)
 }
 
-# Use for loop to process for multiple decennial census years
-#
-for (decyear_in in decyear) {
-  
-  cat("Running function for ", decyear_in, "\n")
-  
-  # Get marker of decennial year
-  #
-  decyear_abr <- substr(decyear_in, 3, 4)
-  
-  # Run function
-  #
-  output <- block2zcta_walk(varnames = exp_list, state_in = stateFIPS,
-                            year = year, decyear = decyear_in)
-  
-  # Set output directory based on decennial year
-  #
-  outdir <- paste0(zcta_outdir, "zcta_", decyear_abr, "/")
-  
-  # Save output
-  #
-  saveRDS(output, paste0(outdir, "PRISM_ZCTA", decyear_abr, "_",year ,"_", stateFIPS,".Rds"))
+# Select decennial geography based on PRISM year
+decyear_in <- map_decyear_by_year(year, decyear)
 
-}
+cat("Running function for ", decyear_in, "\n")
+
+# Get marker of decennial year
+#
+decyear_abr <- substr(decyear_in, 3, 4)
+
+# Run function
+#
+output <- block2zcta_walk(varnames = exp_list, state_in = stateFIPS,
+                          year = year, decyear = decyear_in)
+
+# Set output directory based on decennial year
+#
+outdir <- paste0(zcta_outdir, "zcta_", decyear_abr, "/")
+
+# Save output
+#
+saveRDS(output, paste0(outdir, "PRISM_ZCTA", decyear_abr, "_",year ,"_", stateFIPS,".Rds"))
