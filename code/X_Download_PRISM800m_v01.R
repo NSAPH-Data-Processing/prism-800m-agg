@@ -125,6 +125,11 @@ download_curl_fallback <- function(url, destfile) {
 # FIX 3 (continued): HEAD failure → warn and retry, not hard-stop.
 # FIX 6: wait doubles each attempt (10s, 20s, 40s, 80s, 160s).
 download_with_retry <- function(url, destfile, attempts = 5L, base_wait = 10) {
+  if (is_valid_zipfile(destfile)) {
+    message("..... Reusing existing download: ", basename(destfile))
+    return(TRUE)
+  }
+
   for (attempt in seq_len(attempts)) {
     if (file.exists(destfile)) unlink(destfile)
 
@@ -223,32 +228,52 @@ if (retry_failed) {
 }
 
 failed_downloads <- character(0)
+current_var      <- ""
+current_year     <- ""
 
 for (item in all_work) {
+  if (item$var != current_var) {
+    message("---------------------------------------------------------------------")
+    message("Variable: ", item$var)
+    current_var  <- item$var
+    current_year <- ""
+  }
+  if (as.character(item$year) != current_year) {
+    message("..... Year: ", item$year)
+    current_year <- as.character(item$year)
+  }
+
   dir.create(item$out_dir, recursive = TRUE, showWarnings = FALSE)
 
-  if (day_already_extracted(item$out_dir, item$day)) next
+  if (day_already_extracted(item$out_dir, item$day)) {
+    message(".......... Skipping existing file: ", item$day)
+    next
+  }
 
   # FIX 2: validate any pre-existing zip; delete if corrupt so it gets re-fetched.
   if (file.exists(item$dl_file) && !is_valid_zipfile(item$dl_file)) {
-    message("..... Removing corrupt cached zip for ", item$day)
+    message(".......... Removing corrupt cached zip for ", item$day)
     unlink(item$dl_file)
   }
 
-  if (!file.exists(item$dl_file)) {
+  if (file.exists(item$dl_file)) {
+    message(".......... Reusing cached zip: ", item$day)
+  } else {
+    message(".......... Downloading: ", item$day)
     ok <- download_with_retry(item$dl_link, item$dl_file)
     if (!ok) {
       failed_downloads <- c(failed_downloads, item$key)
-      message("..... ERROR: Failed to download ", item$dl_link)
+      message(".......... ERROR: Failed to download ", item$dl_link)
       next
     }
   }
 
   unzip_ok <- tryCatch({
     extract_tif_member(item$dl_file, item$out_dir)
+    message(".......... OK: ", item$day)
     TRUE
   }, error = function(e) {
-    message("..... ERROR: unzip failed for ", item$dl_file, " (", conditionMessage(e), ")")
+    message(".......... ERROR: unzip failed for ", item$dl_file, " (", conditionMessage(e), ")")
     FALSE
   })
 

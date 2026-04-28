@@ -3,7 +3,7 @@
 #SBATCH -p hsph                # Partition / queue
 #SBATCH -c 4                   # Cores (mostly network I/O, not CPU-bound)
 #SBATCH --mem 32GB             # Memory (for handling downloaded files)
-#SBATCH -t 0-08:00             # Time limit (D-HH:MM) — 8 hours for network downloads
+#SBATCH -t 0-24:00             # Time limit (D-HH:MM) — 8 hours for network downloads
 #SBATCH -o X_Download_PRISM800m_%j.out  # Log file (%j = job ID)
 
 ## ---- Edit these two lines before submitting --------------------------------
