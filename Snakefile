@@ -233,9 +233,6 @@ rule download_inputs:
     params:
         r_version=R_VERSION,
     threads: 4
-    resources:
-        mem_mb=32000,
-        runtime_min=1440
     shell:
         """
         set -euo pipefail
@@ -257,9 +254,6 @@ rule fishnet:
         outdir=lambda wildcards, output: os.path.dirname(output[0]),
         r_version=R_VERSION,
     threads: 16
-    resources:
-        mem_mb=64000,
-        runtime_min=240
     shell:
         """
         set -euo pipefail
@@ -286,9 +280,6 @@ rule extraction_points:
         state_idx=state_index,
         r_version=R_VERSION,
     threads: 4
-    resources:
-        mem_mb=128000,
-        runtime_min=1440
     shell:
         """
         set -euo pipefail
@@ -323,9 +314,6 @@ rule raster_extract:
         state_idx=state_index,
         r_version=R_VERSION,
     threads: 16
-    resources:
-        mem_mb=128000,
-        runtime_min=1440
     shell:
         """
         set -euo pipefail
@@ -348,9 +336,6 @@ rule crosswalk_zcta_inputs:
         pop_dir=lambda wildcards, output: os.path.dirname(output.zcta_pop),
         r_version=R_VERSION,
     threads: 4
-    resources:
-        mem_mb=32000,
-        runtime_min=240
     shell:
         """
         set -euo pipefail
@@ -372,9 +357,6 @@ rule crosswalk_block_population:
         state_idx=state_index,
         r_version=R_VERSION,
     threads: 2
-    resources:
-        mem_mb=16000,
-        runtime_min=240
     shell:
         """
         set -euo pipefail
@@ -401,9 +383,6 @@ rule block_to_zcta_crosswalk:
         state_idx=state_index,
         r_version=R_VERSION,
     threads: 8
-    resources:
-        mem_mb=128000,
-        runtime_min=480
     shell:
         """
         set -euo pipefail
@@ -429,9 +408,6 @@ rule zcta_state_weights:
         outdir=lambda wildcards, output: os.path.dirname(output.weights),
         r_version=R_VERSION,
     threads: 4
-    resources:
-        mem_mb=64000,
-        runtime_min=240
     shell:
         """
         set -euo pipefail
@@ -466,9 +442,6 @@ rule zcta_state:
         state_idx=state_index,
         r_version=R_VERSION,
     threads: 28
-    resources:
-        mem_mb=128000,
-        runtime_min=480
     shell:
         """
         set -euo pipefail
@@ -490,9 +463,6 @@ rule zcta_nationwide:
         outdir=lambda wildcards, output: os.path.dirname(output[0]),
         r_version=R_VERSION,
     threads: 16
-    resources:
-        mem_mb=64000,
-        runtime_min=360
     shell:
         """
         set -euo pipefail
@@ -515,9 +485,6 @@ rule reshape_zcta_outputs:
         yearly_dir=lambda wildcards, output: os.path.dirname(output.yearly[0]),
         r_version=R_VERSION,
     threads: 4
-    resources:
-        mem_mb=32000,
-        runtime_min=120
     shell:
         """
         set -euo pipefail
