@@ -217,7 +217,7 @@ process_prism_blocks <- function(exp_in, state_in, year, decyear) {
   cat("----------------------------------------------------------------\n")
   cat("Beginning variable", exp_in, "\n")
   
-  newvarname <- paste0(exp_in, "_C") # For naming the applicable column in the output data
+  newvarname <- ifelse(exp_in %in% temp_vars, paste0(exp_in, "_C"), exp_in)
   
   # List raster files for variable and year
   #
@@ -307,7 +307,7 @@ process_prism_blocks <- function(exp_in, state_in, year, decyear) {
   } else { cat(":) dimensions of final df are as expected", "\n") }
   
   # Revise name
-  if (exp_in %in% c("tmax", "tmin", "tmean")) {
+  if (exp_in %in% temp_vars) {
     newvarname <- paste0(exp_in, "_C")
   } else {
     newvarname <- exp_in
@@ -380,24 +380,29 @@ if (any(missing_counts > 0)) {
 
 # Automated QC: impossible temperature values
 #
-num_temp_errors <- length(which(all_data$Tmax_C < all_data$Tmea_C |
-                                  all_data$Tmax_C < all_data$Tmin_C |
-                                  all_data$Tmin_C > all_data$Tmea_C |
-                                  all_data$Tmin_C > all_data$Tmax_C))
+temp_check_cols <- c("tmax_C", "tmean_C", "tmin_C")
+if (all(temp_check_cols %in% names(all_data))) {
+  num_temp_errors <- length(which(all_data$tmax_C < all_data$tmean_C |
+                                    all_data$tmax_C < all_data$tmin_C |
+                                    all_data$tmin_C > all_data$tmean_C |
+                                    all_data$tmin_C > all_data$tmax_C))
+} else {
+  num_temp_errors <- 0
+  cat("Skipping relative temperature QC because one or more temperature columns are absent.\n")
+}
 
 options(scipen = 999)
 if (num_temp_errors > 0) { 
   cat("ERROR: impossible temperature values.\n")
   cat(paste0(round((num_temp_errors / dim(all_data)[1]) * 100, 4), "%"), "of block-days are incorrect. \n")
   cat("Applicable rows printed below: \n")
-  print(all_data[which(all_data$Tmax_C < all_data$Tmea_C |
-                            all_data$Tmax_C < all_data$Tmin_C |
-                            all_data$Tmin_C > all_data$Tmea_C |
-                            all_data$Tmin_C > all_data$Tmax_C),])
+  print(all_data[which(all_data$tmax_C < all_data$tmean_C |
+                            all_data$tmax_C < all_data$tmin_C |
+                            all_data$tmin_C > all_data$tmean_C |
+                            all_data$tmin_C > all_data$tmax_C),])
 } else { print(":) all temperature values are of correct *relative* magnitude") }
 
 # Save result 
 #
 saveRDS(all_data, paste0(paste0(block_outdir, "blocks_", decyear_abr, "/", year, "/tl", decyear_abr, "_prism_daily_", year, "_", stateFIPS, ".rds")))
-
 

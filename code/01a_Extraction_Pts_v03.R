@@ -63,8 +63,9 @@
 #
 library("yaml")
 args <- commandArgs(trailingOnly = TRUE)
-.config_path <- if (length(args) >= 2 && grepl("\\.ya?ml$", args[length(args)])) {
-  args[length(args)]
+yaml_args <- args[grepl("\\.ya?ml$", args)]
+.config_path <- if (length(yaml_args) > 0) {
+  yaml_args[length(yaml_args)]
 } else if (file.exists("config.yaml")) {
   "config.yaml"
 } else if (file.exists("../config.yaml")) {
@@ -80,9 +81,20 @@ setwd(config$working_dir)
 #   state_fips: "Nationwide"
 state_fips <- as.character(unlist(config$processing$state_fips))
 
-# Set decennial years to process output extraction points
+# Set decennial years to process output extraction points. If a decennial year
+# is passed after the state index, process only that year; this lets Snakemake
+# track one decennial/state output per job.
 #
-decyear <- as.numeric(unlist(config$processing$decyear))
+non_yaml_args <- args[!grepl("\\.ya?ml$", args)]
+decyear_args <- if (length(non_yaml_args) > 1) non_yaml_args[-1] else character(0)
+decyear <- if (length(decyear_args) > 0) {
+  as.numeric(decyear_args)
+} else {
+  as.numeric(unlist(config$processing$decyear))
+}
+if (any(is.na(decyear))) {
+  stop("Decennial year arguments must be numeric, e.g. 2000, 2010, or 2020.")
+}
 
 # Canonical FIPS lookup CSV path.
 fips_csv <- config$paths$fips_csv
@@ -355,13 +367,34 @@ build_prism_ext_points <- function(decyear, state_in) {
   # %%%%%%%%%%%%%%%%%%%%% CALCULATE LAND-AREA WEIGHTED AVG BY BLOCK %%%%%%%%%%%% #
   #
   #
-  # Set the unique geographic identifier (GEOID) from the extraction_pts sf object
+  # Set the unique geographic identifier from block fields.
+  # Prefer a single year-specific ID to avoid ambiguous matches like GEOID20 + GEOIDFQ20.
   #
-  GEOID <- names(blocks)[grep("GEOID|BLKIDFP", names(blocks))]
+  id_candidates <- switch(
+    as.character(decyear),
+    "2000" = c("BLKIDFP00", "GEOID00", "GEOID"),
+    "2010" = c("GEOID10", "GEOID", "BLKIDFP10"),
+    "2020" = c("GEOID20", "GEOID", "BLKIDFP20"),
+    c("GEOID", "BLKIDFP")
+  )
+
+  GEOID <- intersect(id_candidates, names(extraction_pts))
+
+  if (length(GEOID) != 1) {
+    id_found <- names(extraction_pts)[grep("GEOID|BLKIDFP", names(extraction_pts))]
+    stop(
+      paste0(
+        "Could not identify a unique block ID column for decyear ", decyear,
+        ". Candidates found: ", paste(id_found, collapse = ", ")
+      )
+    )
+  }
+
+  GEOID <- GEOID[1]
   
   # Get the total area by block to calculate the spatial weight value (typically 1.0)
   #
-  eqn <- as.formula(paste0("Area_m2 ~ ", GEOID))
+  eqn <- as.formula(paste0("Area_m2 ~ `", GEOID, "`"))
   
   # Define a function to calculate sums such that if all values are NA then it returns
   # NA rather than 0.

@@ -54,10 +54,50 @@ config <- yaml::read_yaml(.config_path)
 
 setwd(config$working_dir)
 
-# Set decennial year to process
+# Set decennial years available for processing. Each PRISM year is mapped to the
+# matching decennial ZCTA folder and state-weight crosswalk.
 #
-decyear <- as.numeric(config$processing$decyear[1])
-deyr_abr <- substr(decyear, 3, 4)
+decyear <- as.numeric(unlist(config$processing$decyear))
+
+valid_decyears <- c(2000, 2010, 2020)
+
+map_decyear_by_year <- function(year, decyear_config) {
+  decyear_config <- as.numeric(decyear_config)
+  decyear_config <- decyear_config[!is.na(decyear_config)]
+
+  if (length(decyear_config) == 1 && decyear_config %in% valid_decyears) {
+    return(decyear_config)
+  }
+
+  auto_map <- length(decyear_config) == 0 || any(!decyear_config %in% valid_decyears)
+  if (auto_map) {
+    if (year < 2010) {
+      return(2000)
+    }
+    if (year < 2020) {
+      return(2010)
+    }
+    return(2020)
+  }
+
+  if (year < 2010 && 2000 %in% decyear_config) {
+    return(2000)
+  }
+  if (year >= 2010 && year < 2020 && 2010 %in% decyear_config) {
+    return(2010)
+  }
+  if (year >= 2020 && 2020 %in% decyear_config) {
+    return(2020)
+  }
+
+  decyear_config <- sort(unique(decyear_config))
+  decyear_prior <- decyear_config[decyear_config <= year]
+  if (length(decyear_prior) > 0) {
+    return(max(decyear_prior))
+  }
+
+  return(min(decyear_config))
+}
 
 # Set years to process. This script can handle listing many years, so long
 # as ZCTA outputs have been generated
@@ -76,9 +116,7 @@ cross_dir <- config$paths$crosswalk_dir
 
 # This is where the nationwide output will be written
 nation_dir <- config$paths$nation_dir
-
-# This is where output at the state/ZCTA level is expected
-zct_state_dir <- paste0(config$paths$zcta_outdir, "zcta_", deyr_abr, "/")
+dir.create(nation_dir, recursive = TRUE, showWarnings = FALSE)
 
 ################### Set functions ##############################################
 
@@ -86,13 +124,13 @@ zct_state_dir <- paste0(config$paths$zcta_outdir, "zcta_", deyr_abr, "/")
 #
 sumfun <- function(x) { ifelse(all(is.na(x)), return(NA), return(sum(x, na.rm = TRUE))) }
 
-state_weight <- function(input_data, year, varnames) {
+state_weight <- function(input_data, decyear_in, varnames) {
 
   # Read in state weights
-  state_wts <- readRDS(paste0(cross_dir, "ZCTA_StateWt_", year, "_US.Rds"))
+  state_wts <- readRDS(paste0(cross_dir, "ZCTA_StateWt_", decyear_in, "_US.Rds"))
 
   # Assign ZCTA name
-  zc_name <- paste0("ZCTA5CE", substr(year, 3, 4))
+  zc_name <- paste0("ZCTA5CE", substr(decyear_in, 3, 4))
 
   # Join state weights to result
   input_data <- left_join(input_data, state_wts, by = c("ST", zc_name))
@@ -128,21 +166,29 @@ state_weight <- function(input_data, year, varnames) {
 
 ################### Read in exposure data ######################################
 
-# List all ZCTAs
-#
-files_all <- list.files(zct_state_dir, full.names = TRUE)
-
 # Read in and add state from processing for each file, by year
 #
 for (yr in c(years_to_process)) {
   
   cat(yr, "\n")
+
+  decyear_in <- map_decyear_by_year(yr, decyear)
+  deyr_abr <- substr(decyear_in, 3, 4)
+  zct_state_dir <- paste0(config$paths$zcta_outdir, "zcta_", deyr_abr, "/")
   
   # Subset to files for year
   #
-  files_yr <- files_all[grepl(yr, files_all)]
+  files_yr <- list.files(
+    zct_state_dir,
+    pattern = paste0("^PRISM_ZCTA", deyr_abr, "_", yr, "_.*\\.Rds$"),
+    full.names = TRUE
+  )
+
+  if (length(files_yr) == 0) {
+    stop("No state-level ZCTA files found for year ", yr, " in ", zct_state_dir)
+  }
   
-  for (i in 1:length(files_yr)) {
+  for (i in seq_along(files_yr)) {
     
     cat("Now processing ", i, "\n")
     
@@ -191,7 +237,7 @@ for (yr in c(years_to_process)) {
 
   # Apply state weights
   #
-  all_exp <- state_weight(input_data = all_exp, year = decyear, varnames = exp_list)
+  all_exp <- state_weight(input_data = all_exp, decyear_in = decyear_in, varnames = exp_list)
 
   # Rearrange
   #
@@ -206,5 +252,3 @@ for (yr in c(years_to_process)) {
   rm(all_files, all_exp2, all_exp)
   invisible(gc())
 }
-
-

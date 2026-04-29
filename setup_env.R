@@ -62,14 +62,15 @@ install_if_missing(c(
   "tidycensus",  # >= 1.5    — Census data access
   "lwgeom",      # >= 0.2.8  — extended geometry operations
   "data.table",
-  "yaml"
+  "yaml",
+  "arrow"        # final parquet output
 ))
 
 # ---- 3. Verify all packages load -------------------------------------------
 cat("\nVerifying all packages load correctly...\n")
 required <- c("terra", "sf", "plyr", "dplyr", "doBy",
               "tigris", "tidyverse", "tidycensus", "lwgeom",
-              "data.table", "yaml")
+              "data.table", "yaml", "arrow")
 
 failed <- character(0)
 for (pkg in required) {

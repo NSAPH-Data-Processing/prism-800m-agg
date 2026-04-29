@@ -189,8 +189,6 @@ if (!isTRUE(grepl("Nationwide", state_fips))) {
   stateFIPS <- stateFIPS %>% filter(StFIPS %in% c(state_fips))
 } else {
   stateFIPS <- stateFIPS
-  # Remove NE (already run)
-  stateFIPS <- stateFIPS[!stateFIPS$StFIPS %in% c("09", "23", "25", "33", "44", "50"),]
 }
 
 # Get subset from bash input
@@ -206,7 +204,7 @@ block2zcta_walk <- function(varnames, state_in, year, decyear) {
   
   # Update directories based on year/decennial year
   #
-  blockoutdir <- paste0(block_outdir, "Blocks_", decyear_abr, "/", year, "/")
+  blockoutdir <- paste0(block_outdir, "blocks_", decyear_abr, "/", year, "/")
   output_data_dir <- zcta_outdir # Enter the full pathway of the directory where your output data will be stored.
   block_zcta_dir <- paste0(cross_dir)
   
@@ -224,12 +222,12 @@ block2zcta_walk <- function(varnames, state_in, year, decyear) {
   # with block first.
   #
   block_geoid <- names(block_zctas)[grep("^GEOID|BLKIDFP", names(block_zctas), ignore.case = TRUE)[1]]
-  zcta_geoid <- names(block_zctas)[grep("^ZCTA", names(block_zctas), ignore.case = TRUE)]
+  zcta_geoid <- names(block_zctas)[grep("^ZCTA", names(block_zctas), ignore.case = TRUE)[1]]
   
   # Get the GEOID for the block shapefile and for the block populations file, which may 
   # change depending on the year of Census data
   #
-  GEOID_shapefile <- names(block_zctas)[grep("^GEOID|BLKIDFP", names(block_zctas), ignore.case = TRUE)]
+  GEOID_shapefile <- names(block_zctas)[grep("^GEOID|BLKIDFP", names(block_zctas), ignore.case = TRUE)[1]]
   
   # %%%%%%%%%%%% STEP 2. READ IN PRISM BLOCKS THEN WEIGHT TO ZCTA %%%%%%%%%%%% #
   #
@@ -247,9 +245,10 @@ block2zcta_walk <- function(varnames, state_in, year, decyear) {
   
   # Track non-linked blocks
   #
-  if (length( bl_zcta_prism[is.na(bl_zcta_prism$ZCTA5CE00), ]$BLKIDFP00) > 0) {
+  missing_zcta <- is.na(bl_zcta_prism[[zcta_geoid]])
+  if (any(missing_zcta)) {
     cat("WARNING: Not all blocks linked to ZCTA. Missing blocks listed below: \n")
-    cat(unique(bl_zcta_prism[is.na(bl_zcta_prism$ZCTA5CE00), ]$BLKIDFP00))
+    cat(unique(bl_zcta_prism[[GEOID_shapefile]][missing_zcta]))
   }
   
   # Function to check for leap year so that it will work for any year
@@ -291,14 +290,14 @@ block2zcta_walk <- function(varnames, state_in, year, decyear) {
     
     # Automated QC: Check to see if appropriate sum of weights
     #
-    check1 <- summaryBy(as.formula(paste0(subgeowt, " ~ ", zcta_geoid, " + Date_PRISM")),
+    check1 <- summaryBy(as.formula(paste0(subgeowt, " ~ ", zcta_geoid, " + PRISM_Date")),
                         data = bl_zcta_prism_merge[which( !(is.na(bl_zcta_prism_merge[varnames[i]])) ),],
                         FUN = sumfun)
     
     if (length(which(round(check1[[paste0(subgeowt, ".sumfun")]], 4) != numdays)) > 0) {
       cat("WARNING: weights do not all sum to 1 \n") 
       cat("...... total number of rows marked as NA:", length(which(is.na(bl_zcta_prism_merge[[varwt]]))), "\n")
-      allNA <- check1$ZCTA5CE10[which(is.na(check1[[paste0(subgeowt, ".sumfun")]]))]
+      allNA <- check1[[zcta_geoid]][which(is.na(check1[[paste0(subgeowt, ".sumfun")]]))]
       cat("...... number of geographies with NA on all days:", length(allNA), "\n")
       missingNon0 <- length(which(bl_zcta_prism_merge[[popvar]][which(bl_zcta_prism_merge[[zcta_geoid]] %in% allNA)] != 0))
       if (missingNon0 > 0) { cat("...... ERROR: some non-zero pop blocks are missing ALL days"); break }
@@ -354,7 +353,7 @@ block2zcta_walk <- function(varnames, state_in, year, decyear) {
   
   # Subset block-ZCTA cross to missing data
   #
-  check_population <- filter(block_zctas, !!sym(zcta_geoid) %in% ZCTA_missing[["zcta_geoid"]])
+  check_population <- filter(block_zctas, !!sym(zcta_geoid) %in% ZCTA_missing[[zcta_geoid]])
   
   # Assess if all population is Zero
   #
@@ -403,6 +402,7 @@ output <- block2zcta_walk(varnames = exp_list, state_in = stateFIPS,
 # Set output directory based on decennial year
 #
 outdir <- paste0(zcta_outdir, "zcta_", decyear_abr, "/")
+dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 
 # Save output
 #
