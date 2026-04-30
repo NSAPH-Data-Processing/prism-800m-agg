@@ -78,7 +78,8 @@ processing:
   #   state_fips:
   #     - "01"
   #     - "11"
-  state_fips: "Nationwide"
+  state_fips: 
+    - "25"
 
   # PRISM variables to extract and aggregate.
   # Temperature variables (tmax, tmin, tmean, tdmean) are automatically
