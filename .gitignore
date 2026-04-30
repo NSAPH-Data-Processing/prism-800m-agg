@@ -1,3 +1,10 @@
-rawdata/
-.workflow/
+/rawdata
+/intermediate/
 *.out
+.codex
+/config
+.snakemake
+/outputdata
+.workflow
+*.gpkg
+/n/dominici_lab/Lab/data_processing/shreya_prism_800m/prism-800m-agg/intermediate
