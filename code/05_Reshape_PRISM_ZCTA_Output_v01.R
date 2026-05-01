@@ -7,10 +7,10 @@
 #   outputdata/meteorology__prism/population_weighted/zcta_yearly/
 #
 # Daily file naming:
-#   meteorology__gridmet__zcta_daily__YYYY.parquet
+#   meteorology__prism__zcta_daily__YYYY.parquet
 #
 # Yearly file naming:
-#   meteorology__gridmet__zcta_yearly__YYYY.parquet
+#   meteorology__prism__zcta_yearly__YYYY.parquet
 #
 # Usage:
 #   Rscript code/05_Reshape_PRISM_ZCTA_Output_v01.R [config_path]
@@ -142,7 +142,7 @@ for (yr in sort(as.integer(names(daily_by_year)))) {
     mutate(year = as.integer(format(day, "%Y"))) %>%
     select(zcta, day, all_of(value_cols), year)
 
-  daily_path <- file.path(out_daily, sprintf("meteorology__gridmet__zcta_daily__%d.parquet", yr))
+  daily_path <- file.path(out_daily, sprintf("meteorology__prism__zcta_daily__%d.parquet", yr))
   arrow::write_parquet(dat_daily, sink = daily_path)
 
   dat_yearly <- dat_daily %>%
@@ -150,7 +150,7 @@ for (yr in sort(as.integer(names(daily_by_year)))) {
     summarise(across(all_of(value_cols), mean_or_na), .groups = "drop") %>%
     select(zcta, year, all_of(value_cols))
 
-  yearly_path <- file.path(out_yearly, sprintf("meteorology__gridmet__zcta_yearly__%d.parquet", yr))
+  yearly_path <- file.path(out_yearly, sprintf("meteorology__prism__zcta_yearly__%d.parquet", yr))
   arrow::write_parquet(dat_yearly, sink = yearly_path)
 
   cat("Wrote:\n")
