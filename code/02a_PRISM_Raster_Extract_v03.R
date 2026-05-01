@@ -84,6 +84,23 @@ exp_list <- as.character(unlist(config$processing$exp_list))
 # If running for a subset of states, list below. If running nationwide:
 #   state_fips: "Nationwide"
 state_fips <- as.character(unlist(config$processing$state_fips))
+conus_state_fips <- c(
+  "01", "04", "05", "06", "08", "09", "10", "11", "12", "13",
+  "16", "17", "18", "19", "20", "21", "22", "23", "24", "25",
+  "26", "27", "28", "29", "30", "31", "32", "33", "34", "35",
+  "36", "37", "38", "39", "40", "41", "42", "44", "45", "46",
+  "47", "48", "49", "50", "51", "53", "54", "55", "56"
+)
+
+normalize_state_fips <- function(raw_state_fips) {
+  supplied <- as.character(unlist(raw_state_fips))
+  if (length(supplied) == 1 && tolower(supplied) == "nationwide") {
+    return(conus_state_fips)
+  }
+  supplied_num <- suppressWarnings(as.integer(supplied))
+  supplied <- ifelse(is.na(supplied_num), supplied, sprintf("%02d", supplied_num))
+  conus_state_fips[conus_state_fips %in% supplied]
+}
 
 # Set decennial years to process output extraction points
 #
@@ -173,25 +190,14 @@ year <- as.numeric(args[1])
 b <- as.numeric(args[2]) # state FIPS index
 
 # %%%%%%%%%%%%%%%%%%%% IDENTIFY STATE FIPS OF INTEREST %%%%%%%%%%%%%%%%%%%%%%% #
-# Reading in stateFIPS to allow for filtering by state in bash script
-#
-stateFIPS <- read.csv(config$paths$fips_csv, stringsAsFactors = FALSE)
-stateFIPS$StFIPS <- formatC(stateFIPS$StFIPS, width = 2, format = "fg", flag = "0")
-stateFIPS <- stateFIPS %>% filter(!StFIPS %in% c("02", "15"))
-
-# Use NE subset for initial run
-#
-# Restrict to subset as needed
-#
-if (!isTRUE(grepl("Nationwide", state_fips))) {
-  stateFIPS <- stateFIPS %>% filter(StFIPS %in% c(state_fips))
-} else {
-  stateFIPS <- stateFIPS
+stateFIPS <- normalize_state_fips(config$processing$state_fips)
+if (length(stateFIPS) == 0) {
+  stop("No valid CONUS state_fips configured.")
 }
-
-# Get subset from bash input
-#
-stateFIPS <- stateFIPS$StFIPS[b]   
+if (is.na(b) || b < 1 || b > length(stateFIPS)) {
+  stop("State index must be between 1 and ", length(stateFIPS), ".")
+}
+stateFIPS <- stateFIPS[b]
 
 ########################## BUILDING FUNCTIONS  #################################
 
@@ -405,4 +411,3 @@ if (num_temp_errors > 0) {
 # Save result 
 #
 saveRDS(all_data, paste0(paste0(block_outdir, "blocks_", decyear_abr, "/", year, "/tl", decyear_abr, "_prism_daily_", year, "_", stateFIPS, ".rds")))
-

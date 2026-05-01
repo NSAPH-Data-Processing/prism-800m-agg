@@ -25,6 +25,35 @@ From the PRISM website (https://prism.oregonstate.edu/):
 U.S. Census Bureau, “tl_2020_us_blocks”, TIGER/Line Shapefiles, 2020, [https://www2.census.gov/geo/tiger/TIGER2020](https://www2.census.gov/geo/tiger/TIGER2020/TABBLOCK20/)/.
 
 ## Workflow
+### Snakemake orchestration
+The pipeline can be run end-to-end through Snakemake and submitted to Slurm as
+a single batch job:
+
+```bash
+sbatch code/run_snakemake.sbatch
+```
+
+The `Snakefile` reads `config.yaml`, maps each PRISM year to the configured
+decennial census geography, and orchestrates download, fishnet creation,
+block-to-ZCTA crosswalk construction, extraction points, raster extraction,
+ZCTA aggregation, nationwide ZCTA cleaning, and final parquet reshaping. The
+download stage is split into concrete outputs: PRISM variable/year directories,
+state block shapefile components, and the FIPS CSV. This lets downstream rules
+start as soon as their required downloaded inputs are present instead of waiting
+for every configured input to finish downloading.
+
+The crosswalk rules follow the workflow from
+[`Climate-CAFE/block2zcta_xwalk`](https://github.com/Climate-CAFE/block2zcta_xwalk)
+and write the expected files to `rawdata/crosswalk/`. The Census population
+queries use `tidycensus`, so set `CENSUS_API_KEY` in your Slurm environment if
+your cluster does not already provide one.
+
+To inspect the DAG without running jobs:
+
+```bash
+sbatch code/run_snakemake.sbatch --dry-run
+```
+
 Script X: X_Download_PRISM800m_v01.R
 1) Download PRISM 800m rasters and census geographies (block) for use in pipeline.
 
@@ -53,4 +82,3 @@ Script 4:  	04_Zip2Zcta_Cleaning_PRISM_allyrs_v01.R
 
 ## Contact Information: 
 Please open an issue or contact Zach Popp (zpopp@bu.edu) with questions or issues.
-

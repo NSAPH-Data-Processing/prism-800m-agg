@@ -84,6 +84,8 @@ def check_year_decyear(year, decyear_abr):
 STATE_FIPS = normalize_state_fips(config["processing"]["state_fips"])
 STATE_INDEX = {state: index + 1 for index, state in enumerate(STATE_FIPS)}
 YEARS = [int(year) for year in config["processing"]["years_to_process"]]
+EXP_LIST = [str(var) for var in config["processing"]["exp_list"]]
+PRISM_VAR_PATTERN = "|".join(EXP_LIST)
 CONFIG_DECYEARS = [int(year) for year in config["processing"]["decyear"]]
 DECYEAR_BY_YEAR = {year: map_decyear_by_year(year, CONFIG_DECYEARS) for year in YEARS}
 USED_DECYEARS = sorted(set(DECYEAR_BY_YEAR.values()))
@@ -92,7 +94,7 @@ USED_DECYEAR_ABRS = [abr(decyear) for decyear in USED_DECYEARS]
 FISHNET_YEAR = int(config["fishnet"]["year"])
 FISHNET_VAR = str(config["fishnet"]["variable"])
 
-DOWNLOAD_DONE = os.path.join(".workflow", "download.done")
+FIPS_CSV = cfg_path("fips_csv")
 FISHNET_OUTPUT = cfg_path("fishnet_dir", f"prism_fishnet_{FISHNET_VAR}_800m.gpkg")
 
 
@@ -112,6 +114,30 @@ def extraction_points_file(decyear, state):
         "extraction_pts_dir",
         f"PRISM_extraction_points_tl{abr(decyear)}_block_{state}.rds",
     )
+
+
+def prism_year_dir(var, year):
+    return cfg_path("rawdata_dir", str(var), str(year))
+
+
+def prism_year_manifest(var, year):
+    return os.path.join(prism_year_dir(var, year), ".download_complete")
+
+
+def block_shapefile_stem(decyear, state):
+    decyear = str(decyear)
+    tiger_year = "2020" if decyear == "2020" else "2010"
+    suffix = decyear[2:4]
+    return cfg_path(
+        "block_shapefile_dir",
+        decyear,
+        f"tl_{tiger_year}_{state}_tabblock{suffix}",
+    )
+
+
+def block_shapefile_components(decyear, state):
+    stem = block_shapefile_stem(decyear, state)
+    return [stem + ext for ext in [".shp", ".shx", ".dbf", ".prj"]]
 
 
 def block_file(year, state):
@@ -198,6 +224,21 @@ EXTRACTION_POINT_OUTPUTS = [
     for state in STATE_FIPS
 ]
 BLOCK_OUTPUTS = [block_file(year, state) for year in YEARS for state in STATE_FIPS]
+PRISM_YEAR_DIRS = [
+    prism_year_dir(var, year)
+    for var in EXP_LIST
+    for year in YEARS
+]
+PRISM_YEAR_MANIFESTS = [
+    prism_year_manifest(var, year)
+    for var in EXP_LIST
+    for year in YEARS
+]
+BLOCK_SHAPEFILE_OUTPUTS = [
+    block_shapefile_components(decyear, state)
+    for decyear in USED_DECYEARS
+    for state in STATE_FIPS
+]
 BLOCK_TO_ZCTA_OUTPUTS = [
     block_to_zcta_file(decyear, state)
     for decyear in USED_DECYEARS
@@ -224,30 +265,66 @@ rule all:
         YEARLY_PARQUETS
 
 
-rule download_inputs:
+rule download_fips_csv:
     input:
         config=CONFIG_PATH,
     output:
-        stamp=DOWNLOAD_DONE,
-        fips_csv=cfg_path("fips_csv"),
+        FIPS_CSV,
     params:
+        outdir=os.path.dirname(FIPS_CSV),
         r_version=R_VERSION,
-    threads: 4
+    threads: 1
     shell:
         """
         set -euo pipefail
-        mkdir -p .workflow
+        mkdir -p {params.outdir}
         export R_VERSION={params.r_version}
         source code/slurm_runtime_env.sh
-        Rscript code/X_Download_PRISM800m_v01.R {input.config}
-        touch {output.stamp}
+        Rscript code/X_Build_FIPS_CSV_v01.R {input.config}
+        """
+
+
+rule download_prism_year:
+    wildcard_constraints:
+        var=PRISM_VAR_PATTERN,
+        year=r"\d{4}"
+    input:
+        config=CONFIG_PATH,
+    output:
+        prism_year_manifest("{var}", "{year}"),
+    params:
+        outdir=lambda wildcards, output: os.path.dirname(output[0]),
+        r_version=R_VERSION,
+    threads: 1
+    shell:
+        """
+        set -euo pipefail
+        mkdir -p {params.outdir}
+        export R_VERSION={params.r_version}
+        source code/slurm_runtime_env.sh
+        Rscript code/X_Download_PRISM800m_VarYear_v01.R {wildcards.var} {wildcards.year} {input.config}
+        """
+
+
+rule download_block_shapefile:
+    input:
+        config=CONFIG_PATH,
+    output:
+        block_shapefile_components("{decyear}", "{state}"),
+    params:
+        outdir=lambda wildcards, output: os.path.dirname(output[0]),
+    threads: 1
+    shell:
+        """
+        set -euo pipefail
+        bash code/X_Download_Census_Block_Shapefile_v01.sh {wildcards.decyear} {wildcards.state} {params.outdir}
         """
 
 
 rule fishnet:
     input:
         config=CONFIG_PATH,
-        download=DOWNLOAD_DONE,
+        prism_ref=prism_year_manifest(FISHNET_VAR, FISHNET_YEAR),
     output:
         FISHNET_OUTPUT,
     params:
@@ -267,8 +344,13 @@ rule fishnet:
 rule extraction_points:
     input:
         config=CONFIG_PATH,
-        download=DOWNLOAD_DONE,
+        fips=FIPS_CSV,
         fishnet=FISHNET_OUTPUT,
+        prism_ref=prism_year_manifest(FISHNET_VAR, FISHNET_YEAR),
+        block_shp=lambda wildcards: block_shapefile_components(
+            decyear_from_abr(wildcards.decyear_abr),
+            wildcards.state,
+        ),
     output:
         cfg_path(
             "extraction_pts_dir",
@@ -293,7 +375,10 @@ rule extraction_points:
 rule raster_extract:
     input:
         config=CONFIG_PATH,
-        download=DOWNLOAD_DONE,
+        prism_manifests=lambda wildcards: [
+            prism_year_manifest(var, wildcards.year)
+            for var in EXP_LIST
+        ],
         extraction_points=lambda wildcards: extraction_points_file(
             DECYEAR_BY_YEAR[int(wildcards.year)],
             wildcards.state,
@@ -327,7 +412,6 @@ rule raster_extract:
 rule crosswalk_zcta_inputs:
     input:
         config=CONFIG_PATH,
-        download=DOWNLOAD_DONE,
     output:
         zcta=crosswalk_zcta_gpkg("{decyear}"),
         zcta_pop=crosswalk_zcta_population("{decyear}"),
@@ -349,7 +433,6 @@ rule crosswalk_zcta_inputs:
 rule crosswalk_block_population:
     input:
         config=CONFIG_PATH,
-        download=DOWNLOAD_DONE,
     output:
         crosswalk_block_population("{decyear}", "{state}"),
     params:
@@ -370,9 +453,12 @@ rule crosswalk_block_population:
 rule block_to_zcta_crosswalk:
     input:
         config=CONFIG_PATH,
-        download=DOWNLOAD_DONE,
         zcta=lambda wildcards: crosswalk_zcta_gpkg(wildcards.decyear),
         block_pop=lambda wildcards: crosswalk_block_population(
+            wildcards.decyear,
+            wildcards.state,
+        ),
+        block_shp=lambda wildcards: block_shapefile_components(
             wildcards.decyear,
             wildcards.state,
         ),
@@ -421,7 +507,6 @@ rule zcta_state_weights:
 rule zcta_state:
     input:
         config=CONFIG_PATH,
-        download=DOWNLOAD_DONE,
         blocks=lambda wildcards: block_file(wildcards.year, wildcards.state),
         crosswalk=lambda wildcards: block_to_zcta_file(
             DECYEAR_BY_YEAR[int(wildcards.year)],

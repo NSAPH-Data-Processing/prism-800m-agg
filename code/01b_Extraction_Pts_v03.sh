@@ -3,7 +3,7 @@
 #SBATCH -p hsph                # Partition / queue
 #SBATCH --array=1-49           # One task per CONUS state
 #SBATCH -c 4                   # Cores per array task
-#SBATCH --mem 128GB             # Memory per array task
+#SBATCH --mem 64GB             # Memory per array task
 #SBATCH -t 0-24:00             # Time limit (D-HH:MM)
 #SBATCH -o prism_pts_%a.out    # Log file (%a = array task index)
 

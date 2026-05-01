@@ -80,6 +80,23 @@ setwd(config$working_dir)
 # If running for a subset of states, list below. If running nationwide:
 #   state_fips: "Nationwide"
 state_fips <- as.character(unlist(config$processing$state_fips))
+conus_state_fips <- c(
+  "01", "04", "05", "06", "08", "09", "10", "11", "12", "13",
+  "16", "17", "18", "19", "20", "21", "22", "23", "24", "25",
+  "26", "27", "28", "29", "30", "31", "32", "33", "34", "35",
+  "36", "37", "38", "39", "40", "41", "42", "44", "45", "46",
+  "47", "48", "49", "50", "51", "53", "54", "55", "56"
+)
+
+normalize_state_fips <- function(raw_state_fips) {
+  supplied <- as.character(unlist(raw_state_fips))
+  if (length(supplied) == 1 && tolower(supplied) == "nationwide") {
+    return(conus_state_fips)
+  }
+  supplied_num <- suppressWarnings(as.integer(supplied))
+  supplied <- ifelse(is.na(supplied_num), supplied, sprintf("%02d", supplied_num))
+  conus_state_fips[conus_state_fips %in% supplied]
+}
 
 # Set decennial years to process output extraction points. If a decennial year
 # is passed after the state index, process only that year; this lets Snakemake
@@ -155,39 +172,14 @@ if (packageVersion("terra") < "1.5.34"   | packageVersion("sf") < "1.0.7" |
 b <- as.numeric(args[1]) # state FIPS index
 
 # %%%%%%%%%%%%%%%%%%%% IDENTIFY STATE FIPS OF INTEREST %%%%%%%%%%%%%%%%%%%%%%% #
-# Reading in stateFIPS to allow for filtering by state in bash script
-#
-stateFIPS <- read.csv(fips_csv, stringsAsFactors = FALSE)
-if (!"StFIPS" %in% names(stateFIPS) && "state_fips" %in% names(stateFIPS)) {
-  names(stateFIPS)[names(stateFIPS) == "state_fips"] <- "StFIPS"
+stateFIPS <- normalize_state_fips(config$processing$state_fips)
+if (length(stateFIPS) == 0) {
+  stop("No valid CONUS state_fips configured.")
 }
-if (!"STUSPS" %in% names(stateFIPS) && "state_abb" %in% names(stateFIPS)) {
-  names(stateFIPS)[names(stateFIPS) == "state_abb"] <- "STUSPS"
+if (is.na(b) || b < 1 || b > length(stateFIPS)) {
+  stop("State index must be between 1 and ", length(stateFIPS), ".")
 }
-if (!"NAME" %in% names(stateFIPS) && "state_name" %in% names(stateFIPS)) {
-  names(stateFIPS)[names(stateFIPS) == "state_name"] <- "NAME"
-}
-
-if (!"StFIPS" %in% names(stateFIPS)) {
-  stop("FIPS lookup file must include 'StFIPS' (or 'state_fips').")
-}
-stateFIPS$StFIPS <- formatC(stateFIPS$StFIPS, width = 2, format = "fg", flag = "0")
-stateFIPS <- stateFIPS %>% filter(!StFIPS %in% c("02", "15"))
-
-# Use NE subset for initial run
-#
-# Restrict to subset as needed
-#
-if (!isTRUE(grepl("Nationwide", state_fips))) {
-  stateFIPS <- stateFIPS %>% filter(StFIPS %in% c(state_fips))
-} else {
-  stateFIPS <- stateFIPS
-}
-
-# Get subset from bash input
-# If running for a single state, update below
-#         stateFIPS <- "11"
-stateFIPS <- stateFIPS$StFIPS[b]   
+stateFIPS <- stateFIPS[b]
 
 ########################## BUILDING FUNCTIONS ##################################
 # Reference/credit: https://stackoverflow.com/a/68713743

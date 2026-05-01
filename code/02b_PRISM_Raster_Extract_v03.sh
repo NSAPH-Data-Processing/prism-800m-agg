@@ -3,8 +3,8 @@
 #SBATCH -p hsph                # Partition / queue
 #SBATCH --array=1-49           # One task per CONUS state
 #SBATCH -c 16                  # Cores per array task
-#SBATCH --mem 128GB             # Memory per array task
-#SBATCH -t 0-24:00             # Time limit (D-HH:MM)
+#SBATCH --mem 64GB             # Memory per array task
+#SBATCH -t 0-12:00             # Time limit (D-HH:MM)
 #SBATCH -o extract_prism_%a.out  # Log file (%a = array task index)
 
 ## The year is passed as the first argument to this script (e.g., sbatch --array=1-49 02b_PRISM_Raster_Extract_v03.sh 2010).

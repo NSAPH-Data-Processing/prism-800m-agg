@@ -60,6 +60,22 @@ setwd(config$working_dir)
 decyear <- as.numeric(unlist(config$processing$decyear))
 
 valid_decyears <- c(2000, 2010, 2020)
+conus_state_fips <- c(
+  "01", "04", "05", "06", "08", "09", "10", "11", "12", "13",
+  "16", "17", "18", "19", "20", "21", "22", "23", "24", "25",
+  "26", "27", "28", "29", "30", "31", "32", "33", "34", "35",
+  "36", "37", "38", "39", "40", "41", "42", "44", "45", "46",
+  "47", "48", "49", "50", "51", "53", "54", "55", "56"
+)
+
+normalize_state_fips <- function(raw_state_fips) {
+  if (is.character(raw_state_fips) && length(raw_state_fips) == 1 &&
+      tolower(raw_state_fips) == "nationwide") {
+    return(conus_state_fips)
+  }
+  supplied <- sprintf("%02s", as.character(unlist(raw_state_fips)))
+  conus_state_fips[conus_state_fips %in% supplied]
+}
 
 map_decyear_by_year <- function(year, decyear_config) {
   decyear_config <- as.numeric(decyear_config)
@@ -103,6 +119,11 @@ map_decyear_by_year <- function(year, decyear_config) {
 # as ZCTA outputs have been generated
 #
 years_to_process <- as.numeric(unlist(config$processing$years_to_process))
+state_fips <- normalize_state_fips(config$processing$state_fips)
+if (length(state_fips) == 0) {
+  stop("No valid CONUS state_fips configured.")
+}
+state_pattern <- paste(state_fips, collapse = "|")
 
 # Variables to process. Temperature variables (tmax, tmin, tmean, tdmean)
 # carry a "_C" suffix in ZCTA outputs; all others keep their original name.
@@ -180,7 +201,7 @@ for (yr in c(years_to_process)) {
   #
   files_yr <- list.files(
     zct_state_dir,
-    pattern = paste0("^PRISM_ZCTA", deyr_abr, "_", yr, "_.*\\.Rds$"),
+    pattern = paste0("^PRISM_ZCTA", deyr_abr, "_", yr, "_(", state_pattern, ")\\.Rds$"),
     full.names = TRUE
   )
 
