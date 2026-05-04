@@ -204,7 +204,7 @@ def daily_parquet(year):
         "meteorology__prism",
         "population_weighted",
         "zcta_daily",
-        f"meteorology__gridmet__zcta_daily__{year}.parquet",
+        f"meteorology__prism__zcta_daily__{year}.parquet",
     )
 
 
@@ -214,7 +214,7 @@ def yearly_parquet(year):
         "meteorology__prism",
         "population_weighted",
         "zcta_yearly",
-        f"meteorology__gridmet__zcta_yearly__{year}.parquet",
+        f"meteorology__prism__zcta_yearly__{year}.parquet",
     )
 
 
