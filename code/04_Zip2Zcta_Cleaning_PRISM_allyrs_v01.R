@@ -219,7 +219,14 @@ for (yr in c(years_to_process)) {
     
     # Add state as variable
     #
-    file_in$ST <- substr(files_yr[i], nchar(files_yr[i]) - 8, nchar(files_yr[i])- 7)
+    state_match <- regmatches(
+      basename(files_yr[i]),
+      regexec("^PRISM_ZCTA[0-9]{2}_[0-9]{4}_([0-9]{2})\\.Rds$", basename(files_yr[i]))
+    )[[1]]
+    if (length(state_match) < 2) {
+      stop("Could not parse state FIPS from ZCTA file name: ", files_yr[i])
+    }
+    file_in$ST <- state_match[2]
     
     # Bind files
     #
