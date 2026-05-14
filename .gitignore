@@ -1,10 +1,34 @@
-/rawdata
-/intermediate/
-*.out
+# Local editor/session files
 .codex
-/config
-.snakemake
-/outputdata
-.workflow
+.Rhistory
+.RData
+.Ruserdata
+
+# Local configuration and scratch state
+/config/
+
+# Generated data and workflow outputs
+/rawdata/
+/intermediate/
+/outputdata/
+/data/
+
+# Workflow/runtime caches
+/.snakemake/
+/.workflow/
+/logs/
+
+# Local R environments/libraries
+/renv/library/
+/renv/staging/
+/renv/python/
+
+# Cluster and pipeline logs
+*.out
+*.log
+slurm-*.out
+
+# Generated geospatial/database artifacts
 *.gpkg
-/n/dominici_lab/Lab/data_processing/shreya_prism_800m/prism-800m-agg/intermediate
+*.sqlite
+*.sqlite3
