@@ -2,13 +2,10 @@
 # PRISM 800m Aggregation Pipeline — Configuration
 # =========================================================================== #
 # This file controls all user-configurable parameters for the pipeline.
-# Place it in the project root alongside the rawdata/, code/,
-# intermediate/, and outputdata/ directories.
+# Place it at conf/snakemake.yaml relative to the project root.
 #
 # Pass the absolute path to this file as the last command-line argument in
-# each qsub/Rscript call (recommended), or rely on auto-detection: each
-# script looks for config.yaml in the current working directory and then
-# one level up.
+# each qsub/Rscript call (recommended).
 # =========================================================================== #
 
 # Absolute path to the project root directory.
@@ -69,8 +66,15 @@ processing:
     - 2014
     - 2015
     - 2016
+    - 2017
+    - 2018
+    - 2019
+    - 2020
+    - 2021
+    - 2022
+    - 2023
 
-    
+
 
   # State FIPS filter.
   # Use "Nationwide" to process all CONUS states (excluding AK and HI), or
@@ -78,8 +82,7 @@ processing:
   #   state_fips:
   #     - "01"
   #     - "11"
-  state_fips: 
-    - "25"
+  state_fips: "Nationwide"
 
   # PRISM variables to extract and aggregate.
   # Temperature variables (tmax, tmin, tmean, tdmean) are automatically

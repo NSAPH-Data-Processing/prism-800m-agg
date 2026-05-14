@@ -3,7 +3,7 @@
 #SBATCH -p hsph
 #SBATCH -c 28
 #SBATCH --mem=128GB
-#SBATCH -t 2-00:00
+#SBATCH -t 3-00:00
 #SBATCH -o prism_snakemake_%j.out
 
 # Submit the Snakemake-orchestrated pipeline with:
@@ -16,7 +16,7 @@
 set -euo pipefail
 
 PROJECT_DIR="/n/dominici_lab/Lab/data_processing/shreya_prism_800m/prism-800m-agg"
-CONFIG="${CONFIG:-${PROJECT_DIR}/config.yaml}"
+CONFIG="${CONFIG:-${PROJECT_DIR}/conf/snakemake.yaml}"
 R_VERSION="${R_VERSION:-4.4.1}"
 
 SNAKEMAKE_CORES="${SNAKEMAKE_CORES:-${SLURM_CPUS_PER_TASK:-1}}"

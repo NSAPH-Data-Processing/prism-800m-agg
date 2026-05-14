@@ -33,7 +33,7 @@ a single batch job:
 sbatch code/run_snakemake.sbatch
 ```
 
-The `Snakefile` reads `config.yaml`, maps each PRISM year to the configured
+The `Snakefile` reads `conf/snakemake.yaml`, maps each PRISM year to the configured
 decennial census geography, and orchestrates download, fishnet creation,
 block-to-ZCTA crosswalk construction, extraction points, raster extraction,
 ZCTA aggregation, nationwide ZCTA cleaning, and final parquet reshaping. The
