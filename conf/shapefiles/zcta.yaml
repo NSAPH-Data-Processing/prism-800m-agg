@@ -1,0 +1,8 @@
+# ZCTA shapefiles (cartographic boundaries)
+# https://www.census.gov/programs-surveys/geography/guidance/tiger-data-products-guide.html
+years:
+  - 2000
+  - 2010
+  - 2020
+idvar: "zcta"
+prefix: "us_shapefile__census__zcta_yearly__"

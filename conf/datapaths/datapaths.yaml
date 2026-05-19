@@ -1,0 +1,26 @@
+base_path: meteorology__prism
+
+dirs:
+  input:
+    raw: /path/to/lego/environmental/meteorology__prism/raw
+    shapefiles:
+      county_yearly: /path/to/lego/geoboundaries/us_geoboundaries__census/us_shapefile__census/county_yearly
+      zcta_yearly: /path/to/lego/geoboundaries/us_geoboundaries__census/us_shapefile__census/zcta_yearly
+      block_2000_state: /path/to/lego/environmental/meteorology__prism/raw/blocks/shapefiles/2000
+      block_2010_state: /path/to/lego/environmental/meteorology__prism/raw/blocks/shapefiles/2010
+      block_2020_state: /path/to/lego/environmental/meteorology__prism/raw/blocks/shapefiles/2020
+    fips_xwalk: /path/to/lego/geoboundaries/us_geoboundaries__census/fips2abbr/fips_xwalk.parquet
+
+  intermediate:
+    fishnet: /path/to/lego/environmental/meteorology__prism/intermediate/fishnet
+    extraction_points: /path/to/lego/environmental/meteorology__prism/intermediate/extraction_points
+    blocks: /path/to/lego/environmental/meteorology__prism/intermediate/blocks
+    crosswalk: /path/to/lego/environmental/meteorology__prism/intermediate/crosswalk
+    zcta: /path/to/lego/environmental/meteorology__prism/intermediate/zcta
+
+  output:
+    zcta_daily: /path/to/lego/environmental/meteorology__prism/zcta_daily
+    zcta_yearly: /path/to/lego/environmental/meteorology__prism/zcta_yearly
+    zcta_nationwide: /path/to/lego/environmental/meteorology__prism/zcta_nationwide
+    county_daily: /path/to/lego/environmental/meteorology__prism/county_daily
+    county_yearly: /path/to/lego/environmental/meteorology__prism/county_yearly
