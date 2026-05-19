@@ -4,12 +4,20 @@ import os
 import hydra
 from omegaconf import DictConfig
 
-try:
-    from src.prism_paths import local_base_path
-except ModuleNotFoundError:
-    from prism_paths import local_base_path
-
 LOGGER = logging.getLogger(__name__)
+
+
+def local_base_path(datapaths_cfg: DictConfig, data_dir: str = "data") -> str:
+    base_path = datapaths_cfg.get("base_path") if datapaths_cfg else None
+    if base_path:
+        path = os.fspath(base_path)
+        if os.path.isabs(path) or path.startswith(f"{data_dir}/"):
+            return path
+        return os.path.join(data_dir, path)
+    name = datapaths_cfg.get("name") if datapaths_cfg else None
+    if name:
+        return os.path.join(data_dir, str(name))
+    return data_dir
 
 
 def init_folder(datapath: str = "data", folder_cfg: DictConfig | None = None) -> None:
