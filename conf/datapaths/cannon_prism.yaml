@@ -9,7 +9,7 @@ dirs:
       block_2000_state: /n/dominici_lab/lab/lego/environmental/meteorology__prism/raw/blocks/shapefiles/2000
       block_2010_state: /n/dominici_lab/lab/lego/environmental/meteorology__prism/raw/blocks/shapefiles/2010
       block_2020_state: /n/dominici_lab/lab/lego/environmental/meteorology__prism/raw/blocks/shapefiles/2020
-    fips_xwalk: /n/dominici_lab/lab/lego/geoboundaries/us_geoboundaries__census/fips2abbr/fips_xwalk.parquet
+    fips_xwalk: /n/dominici_lab/lab/lego/geoboundaries/us_geoboundaries__census/fips2abbr
 
   intermediate:
     fishnet: /n/dominici_lab/lab/lego/environmental/meteorology__prism/intermediate/fishnet
